@@ -6,17 +6,41 @@ Each file is self-contained and documented inline (top comment block) with exact
 
 ## What each component does
 
-**`sky-ttlr-episode-router.html`** turns a CMS list of episodes into a single-episode viewer. All episodes in a Series render into the page as normal (that's how Webflow's CMS binding works), but the script hides every item except one and toggles `.ttlr_episode_button.is-prev` / `.is-next` to step through them — no page navigation, no reload. The current episode number is mirrored into a `?episode=` query param via `history.pushState`, so a link straight to `?episode=3` opens on that episode. Leaving an episode (via Prev or Next) writes that episode's completion to Memberstack; once every episode in the series is marked complete, it also writes series-level completion, which is what a completion badge elsewhere on the site would read.
+Both components below live in `sky-ttlr.js`/`sky-ttlr.css`, each under its own clearly-commented section — nothing here is a separate file anymore (see Install).
 
-**`sky-ttlr-dragdrop-quiz.html`** is a matching quiz built on interact.js: each "prop" is draggable, and it only actually leaves the tray and gets placed in the DOM when it's dropped on its correct, still-empty zone (`data-correct-zone` on the prop must match `data-zone-id` on the zone) — every other drop just snaps back to the tray with a reject flash, so there's no fail state and unlimited retries. It also ships a full keyboard path (Tab to a prop, Enter to grab it, Tab to a zone, Enter to attempt the drop, Escape to cancel) and an `aria-live` region that announces placements and rejections, so it doesn't depend on drag gestures to be usable. Once every prop is correctly placed it fires a `ttlr:quizCompleted` custom event that other code can listen for.
+**Episode router** turns a CMS list of episodes into a single-episode viewer. All episodes in a Series render into the page as normal (that's how Webflow's CMS binding works), but the script hides every item except one and toggles `.ttlr_episode_button.is-prev` / `.is-next` to step through them — no page navigation, no reload. The current episode number is mirrored into a `?episode=` query param via `history.pushState`, so a link straight to `?episode=3` opens on that episode. Leaving an episode (via Prev or Next) writes that episode's completion to Memberstack; once every episode in the series is marked complete, it also writes series-level completion, which is what a completion badge elsewhere on the site would read.
+
+**Drag & drop quiz** is a matching quiz built on interact.js: each "prop" is draggable, and it only actually leaves the tray and gets placed in the DOM when it's dropped on its correct, still-empty zone (`data-correct-zone` on the prop must match `data-zone-id` on the zone) — every other drop just snaps back to the tray with a reject flash, so there's no fail state and unlimited retries. It also ships a full keyboard path (Tab to a prop, Enter to grab it, Tab to a zone, Enter to attempt the drop, Escape to cancel) and an `aria-live` region that announces placements and rejections, so it doesn't depend on drag gestures to be usable. Once every prop is correctly placed it fires a `ttlr:quizCompleted` custom event that other code can listen for.
 
 ## Files
 
 | File | Status |
 |---|---|
-| `sky-ttlr-episode-router.html` | Delivered — needs `data-series-id` added in Designer (see below) |
-| `sky-ttlr-dragdrop-quiz.html` | Delivered — currently debugging zone-detection (see Known issues) |
+| `sky-ttlr.js` | Delivered — episode router needs `data-series-id` added in Designer, drag-drop quiz currently debugging zone-detection (see below) |
+| `sky-ttlr.css` | Delivered |
 
+All custom behavior lives in these two files now (episode router + drag-drop quiz today; swiper and glass-effect will fold in here once added). Webflow references them directly instead of pasting file contents into Custom Code.
+
+## Install
+
+This repo is public, so `sky-ttlr.js`/`sky-ttlr.css` are served straight off GitHub via [jsDelivr](https://www.jsdelivr.com/?docs=gh) — no build step, no hosting to manage. The URL is pinned to a release tag (not `@main`) so a push to this repo never silently changes what's live on Sky's site; bump the tag in Webflow only when you're ready to deploy an update.
+
+Add to Webflow Site Settings → Custom Code → **Head**:
+
+```html
+<script src="https://cdn.jsdelivr.net/npm/interactjs/dist/interact.min.js"></script>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/elisa-sanchez-mb/sky-ttlr@v1.0.0/sky-ttlr.css">
+```
+
+Add to Webflow Site Settings → Custom Code → **before `</body>`** (after `webflow.js` and after Memberstack's own script tag):
+
+```html
+<script src="https://cdn.jsdelivr.net/gh/elisa-sanchez-mb/sky-ttlr@v1.0.0/sky-ttlr.js"></script>
+```
+
+`interact.js` is a third-party dependency of the drag-drop quiz and is loaded from its own CDN rather than bundled into `sky-ttlr.js`, so it keeps its own versioning/caching. It's optional at runtime — if it fails to load, the drag-drop quiz no-ops rather than throwing, and the episode router is unaffected.
+
+**To ship an update:** push to `main`, tag the commit (`git tag vX.Y.Z && git push --tags`), then update the `@vX.Y.Z` in both Webflow URLs to match.
 
 ## Required Designer steps
 

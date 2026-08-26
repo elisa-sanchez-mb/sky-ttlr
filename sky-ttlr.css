@@ -1,0 +1,81 @@
+/*
+  Sky TTLR — Custom Code (styles)
+  Prepared by MakeBuild
+
+  Functional states only — visual design (color, spacing, etc.) is Webflow's.
+*/
+
+/* ---- Episode router ---- */
+
+.ttlr_episode_button.is-disabled,
+.ttlr_episode_button[disabled] {
+  opacity: 0.4;
+  cursor: default;
+  pointer-events: none;
+}
+
+/* ---- Drag & drop quiz ---- */
+
+.ttlr_dragdrop_prop_item {
+  touch-action: none; /* required by interact.js for reliable touch dragging */
+  cursor: grab;
+  user-select: none;
+}
+
+.ttlr_dragdrop_prop_item[aria-disabled="true"] {
+  cursor: default;
+}
+
+/* Transform creates its own stacking context, but bump it explicitly so
+   it reliably paints above neighbouring props/zones mid-drag. Relative
+   positioning with no top/left set doesn't move the box at all. */
+.ttlr_dragdrop_prop_item.is-dragging {
+  position: relative;
+  z-index: 50;
+}
+
+.ttlr_dragdrop_prop_item.is-grabbed {
+  outline: 2px solid currentColor;
+  outline-offset: 2px;
+}
+
+.ttlr_dragdrop_prop_item.is-correct {
+  outline: 2px solid #2e7d32;
+}
+
+.ttlr_dragdrop_drop-zone.drop-hover,
+.ttlr_dragdrop_props_wrap.drop-hover {
+  outline: 2px dashed currentColor;
+  outline-offset: 2px;
+}
+
+/* Brief red flash on the zone that just rejected a wrong prop */
+.ttlr_dragdrop_drop-zone.is-rejected {
+  animation: ttlr-reject-flash 0.4s ease;
+}
+
+@keyframes ttlr-reject-flash {
+  0%, 100% { outline-color: transparent; }
+  30% { outline: 2px solid #c62828; }
+}
+
+/* Brief shake on the prop itself when it snaps back */
+.ttlr_dragdrop_prop_item.is-rejected {
+  animation: ttlr-reject-shake 0.3s ease;
+}
+
+@keyframes ttlr-reject-shake {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-4px); }
+  75% { transform: translateX(4px); }
+}
+
+/* Visually-hidden live region for screen-reader announcements */
+.ttlr_dragdrop_live {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+}
