@@ -14,6 +14,18 @@
   pointer-events: none;
 }
 
+/* Crossfade between episodes (see show() in sky-ttlr.js) — .ttlr-episode-fade
+   is added to trigger a fade to 0, on both the outgoing item (fading out)
+   and briefly on the incoming one (to fade it in from 0), so both animate
+   concurrently. Duration must stay in sync with EPISODE_TRANSITION_MS there. */
+.ttlr_episode_cms_item {
+  transition: opacity 0.25s ease;
+}
+
+.ttlr_episode_cms_item.ttlr-episode-fade {
+  opacity: 0;
+}
+
 /* Progress bar: .ttlr_progress_fill's own background (gradient, colors, etc.)
    is entirely Designer's — this file never sets `background` on it, on
    purpose, since the `background` shorthand resets background-image to
@@ -35,8 +47,20 @@
   inset: 0;
   width: 100%;
   clip-path: inset(0 100% 0 0); /* 0% complete by default; JS sets this per episode progress */
-  transition: clip-path 0.3s ease;
+  transition: clip-path 0.45s cubic-bezier(0.22, 1, 0.36, 1);
   pointer-events: none;
+}
+
+/* Brief pulse on a genuine progress increase (see updateProgressDisplay in
+   sky-ttlr.js — never fires on the initial paint or a no-change re-render).
+   Uses filter, not background, so it still never touches Designer's gradient. */
+.ttlr_progress_fill.is-updated {
+  animation: ttlr-progress-pulse 0.5s ease;
+}
+
+@keyframes ttlr-progress-pulse {
+  0%, 100% { filter: brightness(1); }
+  50% { filter: brightness(1.25); }
 }
 
 /* Empty-state color for segments not yet reached by the fill. Safe to set
