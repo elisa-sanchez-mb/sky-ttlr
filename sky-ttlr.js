@@ -480,33 +480,39 @@ function initEpisodeRouter(listEl) {
   }
 
   // ---- Show exactly one item; sync the URL; update button states ----
-  const EPISODE_TRANSITION_MS = 250; // keep in sync with the CSS transition duration on .ttlr_episode_cms_item
+  const EPISODE_TRANSITION_MS = 150; // keep in sync with the CSS transition duration on .ttlr_episode_cms_item
 
   function show(index) {
     const outgoingItem = hasShownOnce ? items[currentIndex] : null;
     const incomingItem = items[index];
     currentIndex = index;
 
-    if (!outgoingItem) {
-      // First paint: instant, no transition — nothing to fade from yet.
+    if (!outgoingItem || outgoingItem === incomingItem) {
+      // First paint (or somehow re-showing the same item): instant, no fade.
       items.forEach((item, i) => {
         item.style.display = i === index ? '' : 'none';
       });
       hasShownOnce = true;
-    } else if (outgoingItem !== incomingItem) {
+    } else {
+      // Sequential fade: fully hide the outgoing item before showing the
+      // incoming one. A true simultaneous crossfade needs both items
+      // absolutely positioned to overlap in place — without that, having
+      // both in normal document flow at once (even briefly) visibly jumps
+      // the page height/layout as they stack, which read as "glitchy".
+      // Sequential is layout-safe regardless of Designer's markup.
       outgoingItem.classList.add('ttlr-episode-fade');
       window.setTimeout(() => {
         outgoingItem.style.display = 'none';
         outgoingItem.classList.remove('ttlr-episode-fade');
-      }, EPISODE_TRANSITION_MS);
 
-      incomingItem.style.display = '';
-      incomingItem.classList.add('ttlr-episode-fade');
-      // Force a reflow so the browser commits the opacity:0 starting state
-      // before removing the class — otherwise add+remove in the same tick
-      // would get coalesced into a no-op with nothing to animate from.
-      void incomingItem.offsetWidth;
-      incomingItem.classList.remove('ttlr-episode-fade');
+        incomingItem.style.display = '';
+        incomingItem.classList.add('ttlr-episode-fade');
+        // Force a reflow so the browser commits the opacity:0 starting state
+        // before removing the class — otherwise add+remove in the same tick
+        // would get coalesced into a no-op with nothing to animate from.
+        void incomingItem.offsetWidth;
+        incomingItem.classList.remove('ttlr-episode-fade');
+      }, EPISODE_TRANSITION_MS);
     }
 
     const number = numberOf(items[index]);
