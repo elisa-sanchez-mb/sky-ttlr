@@ -45,13 +45,13 @@ Add to Webflow Site Settings → Custom Code → **Head**:
 
 ```html
 <script src="https://cdn.jsdelivr.net/npm/interactjs/dist/interact.min.js"></script>
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/elisa-sanchez-mb/sky-ttlr@v1.3.3/sky-ttlr.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/elisa-sanchez-mb/sky-ttlr@v1.3.4/sky-ttlr.css">
 ```
 
 Add to Webflow Site Settings → Custom Code → **before `</body>`** (after `webflow.js` and after Memberstack's own script tag):
 
 ```html
-<script src="https://cdn.jsdelivr.net/gh/elisa-sanchez-mb/sky-ttlr@v1.3.3/sky-ttlr.js"></script>
+<script src="https://cdn.jsdelivr.net/gh/elisa-sanchez-mb/sky-ttlr@v1.3.4/sky-ttlr.js"></script>
 ```
 
 `interact.js` is a third-party dependency of the drag-drop quiz and is loaded from its own CDN rather than bundled into `sky-ttlr.js`, so it keeps its own versioning/caching. It's optional at runtime — if it fails to load, the drag-drop quiz no-ops rather than throwing, and the episode router is unaffected.
@@ -71,7 +71,7 @@ These Custom Attributes have to exist on the live markup for the scripts above t
 - **`[bookmark="btn"]`** — a single button placed once on the page (not inside each `.ttlr_episode_cms_item`), containing the bookmark ribbon SVG with an `<svg><path>` inside it. The script reads/writes that `<path>`'s `d` attribute directly to switch between outline and filled, so the SVG markup needs to be the actual `<svg>`/`<path>` element, not a background-image or other substitute.
 - **`.notes_copy_success`** — searched for anywhere inside the notes component root (it's a *sibling* of `.notes_actions` in the current Designer markup, not nested inside the copy button), with its own `.notes_copy_close` close button wired up automatically if present. Falls back to an auto-created placeholder only if the element is missing entirely.
 - **`.ttlr_series-end_success`** — a single element placed once on the page (like the bookmark button and progress bar), hidden by default. The script only adds `.is-active` to reveal it when "Finish Series" is clicked; content/layout is Designer's.
-- **`.ttlr_progress_fill`'s `--n`/`--i` custom properties** — if Designer's own CSS for this element uses a `background-position-x`/`background-size` trick keyed on `--n` (total steps) and `--i` (current step) — as it currently does, for a rainbow gradient that pans across segments — the script sets both automatically (`--n` = total episodes, `--i` = completed count) alongside the `clip-path` fill percentage. No Designer action needed, just documented here since it's not obvious from the JS alone.
+- **`.ttlr_progress_fill`'s `background` (gradient, etc.) is entirely Designer's** — the script never sets `background` on it (an earlier version tried panning it with `--n`/`--i` custom properties; removed, since the intended look is one continuous gradient revealed proportionally via `clip-path`, not a panned/per-segment color). Keep whatever `background-image` is already declared for it in Designer as-is.
 
 ## Memberstack setup
 
