@@ -340,8 +340,43 @@ function initEpisodeRouter(listEl) {
   // ---- Series-end success screen: shown when "Finish Series" is clicked on
   // the last episode (see updateButtonStates / the click-wiring loop below).
   const seriesEndSuccessEl = document.querySelector('.ttlr_series-end_success');
+  const completedEpisodeWrapEl = document.querySelector('.ttlr_completed_episode_wrap');
+  const seriesSecondsEl = document.querySelector('[data-series-element="seconds"]');
+  console.log('[ttlr] series-end: .ttlr_series-end_success', seriesEndSuccessEl, '/ .ttlr_completed_episode_wrap', completedEpisodeWrapEl, '/ [data-series-element="seconds"]', seriesSecondsEl);
+
+  // Confetti is an optional third-party dependency (canvas-confetti, see
+  // README) — same "load separately, fail quietly if missing" treatment as
+  // interact.js, so a page without that script tag doesn't throw here.
+  function fireConfetti() {
+    if (typeof window.confetti !== 'function') {
+      console.warn('[ttlr] confetti: window.confetti is not available — add the canvas-confetti <script> tag (see README) for the celebration effect.');
+      return;
+    }
+    window.confetti({ particleCount: 150, spread: 70, origin: { y: 0.6 } });
+  }
+
+  // 30s countdown into [data-series-element="seconds"]. Guards against
+  // overlapping intervals if "Finish Series" is somehow triggered more than
+  // once (markComplete() itself is idempotent, but this screen can still be
+  // re-shown) — always clears any previous countdown before starting a new one.
+  let seriesEndCountdownInterval = null;
+  function startSeriesEndCountdown() {
+    if (!seriesSecondsEl) return;
+    window.clearInterval(seriesEndCountdownInterval);
+    let secondsLeft = 30;
+    seriesSecondsEl.textContent = String(secondsLeft);
+    seriesEndCountdownInterval = window.setInterval(() => {
+      secondsLeft -= 1;
+      seriesSecondsEl.textContent = String(Math.max(0, secondsLeft));
+      if (secondsLeft <= 0) window.clearInterval(seriesEndCountdownInterval);
+    }, 1000);
+  }
+
   function showSeriesEndSuccess() {
     if (seriesEndSuccessEl) seriesEndSuccessEl.classList.add('is-active');
+    if (completedEpisodeWrapEl) completedEpisodeWrapEl.classList.add('is-active');
+    fireConfetti();
+    startSeriesEndCountdown();
   }
 
   // ---- Bookmarks: one global button (not per-episode) that bookmarks whichever
@@ -1068,4 +1103,79 @@ function initNotesPad(root) {
       if (!isOpen()) root.style.width = '';
     }).observe(root, { attributes: true, attributeFilter: ['is-open'] });
   }
+}
+
+/* ---- Series navigation: Next/Previous Series buttons. Same mechanism as
+   the Refokus "CMS Prev/Next" tool (replicated natively here rather than
+   loading their script, to stay dependency-free like the rest of this
+   project): a hidden Collection List bound to the Series collection, in
+   whatever order you want navigation to follow, is used purely as a lookup
+   table — match the current page's URL against each item's own link to find
+   its position, then Next/Prev just point at the adjacent item's link.
+   Setup instructions were given directly in chat, not documented in the
+   README (by request) — ask if you need them again. ---- */
+
+window.Webflow ||= [];
+window.Webflow.push(function () {
+  document.querySelectorAll('[data-series-nav="source"]').forEach(initSeriesNav);
+});
+
+function initSeriesNav(sourceEl) {
+  const itemEls = Array.from(sourceEl.querySelectorAll('.w-dyn-item'));
+  console.log('[ttlr] series nav: found ' + itemEls.length + ' item(s) in [data-series-nav="source"]');
+  if (!itemEls.length) return;
+
+  const items = itemEls
+    .map((itemEl) => {
+      const link = itemEl.tagName === 'A' ? itemEl : itemEl.querySelector('a[href]');
+      if (!link) return null;
+      return {
+        href: link.href,
+        text: link.textContent.trim(),
+        imgSrc: link.querySelector('img')?.src || itemEl.querySelector('img')?.src || '',
+      };
+    })
+    .filter(Boolean);
+
+  const currentPath = window.location.pathname.replace(/\/$/, '');
+  const currentIndex = items.findIndex((item) => new URL(item.href).pathname.replace(/\/$/, '') === currentPath);
+  console.log('[ttlr] series nav: current page matched at index ' + currentIndex + ' of ' + items.length);
+  if (currentIndex === -1) {
+    console.warn('[ttlr] series nav: current page URL did not match any item in [data-series-nav="source"] — check the hidden list includes every series and each links to its own real, published page.');
+  }
+
+  const nextItem = currentIndex !== -1 ? items[currentIndex + 1] || null : null;
+  const prevItem = currentIndex !== -1 ? items[currentIndex - 1] || null : null;
+
+  function wireNavButton(direction, item) {
+    document.querySelectorAll(`[data-series-nav="${direction}-btn"]`).forEach((btn) => {
+      if (!item) {
+        btn.classList.add('is-disabled');
+        btn.setAttribute('aria-disabled', 'true');
+        if (btn.tagName === 'A') btn.removeAttribute('href');
+        return;
+      }
+      btn.classList.remove('is-disabled');
+      btn.setAttribute('aria-disabled', 'false');
+      if (btn.tagName === 'A') {
+        btn.href = item.href; // native navigation — no JS needed beyond this
+      } else {
+        btn.addEventListener('click', () => { window.location.href = item.href; });
+      }
+    });
+  }
+
+  function fillNavContent(direction, item) {
+    document.querySelectorAll(`[data-series-nav="${direction}-text"]`).forEach((el) => {
+      el.textContent = item ? item.text : '';
+    });
+    document.querySelectorAll(`[data-series-nav="${direction}-img"]`).forEach((el) => {
+      if (item && item.imgSrc) el.src = item.imgSrc;
+    });
+  }
+
+  wireNavButton('next', nextItem);
+  wireNavButton('prev', prevItem);
+  fillNavContent('next', nextItem);
+  fillNavContent('prev', prevItem);
 }
