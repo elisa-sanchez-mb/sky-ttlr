@@ -23,24 +23,26 @@ All custom behavior lives in these two files now (episode router + drag-drop qui
 
 ## Install
 
-This repo is public, so `sky-ttlr.js`/`sky-ttlr.css` are served straight off GitHub via [jsDelivr](https://www.jsdelivr.com/?docs=gh) — no build step, no hosting to manage. The URL is pinned to a release tag (not `@main`) so a push to this repo never silently changes what's live on Sky's site; bump the tag in Webflow only when you're ready to deploy an update.
+This repo is public and lives under the `makebuild-code` org (same setup as other MakeBuild client projects, e.g. `wih1-quiz`), served via **GitHub Pages** off `main` at root — no build step, no separate hosting to manage.
+
+> **Pages needs to be turned on once:** repo Settings → Pages → Build and deployment → Source: *Deploy from a branch* → Branch: `main`, `/ (root)`. This requires admin access to the repo; ask a `makebuild-code` org owner if you don't have it. Once enabled, the site is live at `https://makebuild-code.github.io/sky-ttlr/`.
 
 Add to Webflow Site Settings → Custom Code → **Head**:
 
 ```html
 <script src="https://cdn.jsdelivr.net/npm/interactjs/dist/interact.min.js"></script>
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/elisa-sanchez-mb/sky-ttlr@v1.0.0/sky-ttlr.css">
+<link rel="stylesheet" href="https://makebuild-code.github.io/sky-ttlr/sky-ttlr.css">
 ```
 
 Add to Webflow Site Settings → Custom Code → **before `</body>`** (after `webflow.js` and after Memberstack's own script tag):
 
 ```html
-<script src="https://cdn.jsdelivr.net/gh/elisa-sanchez-mb/sky-ttlr@v1.0.0/sky-ttlr.js"></script>
+<script src="https://makebuild-code.github.io/sky-ttlr/sky-ttlr.js"></script>
 ```
 
 `interact.js` is a third-party dependency of the drag-drop quiz and is loaded from its own CDN rather than bundled into `sky-ttlr.js`, so it keeps its own versioning/caching. It's optional at runtime — if it fails to load, the drag-drop quiz no-ops rather than throwing, and the episode router is unaffected.
 
-**To ship an update:** push to `main`, tag the commit (`git tag vX.Y.Z && git push --tags`), then update the `@vX.Y.Z` in both Webflow URLs to match.
+**Unlike the previous jsDelivr setup, this URL is not pinned to a version** — GitHub Pages always serves whatever is currently on `main`, so a push to this repo goes live on Sky's site immediately (Pages typically redeploys within ~1 minute of a push). Treat `main` accordingly: test changes on a branch/locally before merging, since there's no tag-and-bump step to catch a bad push before it reaches production.
 
 ## Required Designer steps
 
