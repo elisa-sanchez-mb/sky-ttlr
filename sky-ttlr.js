@@ -1129,13 +1129,23 @@ function initSeriesNav(sourceEl) {
     .map((itemEl) => {
       const link = itemEl.tagName === 'A' ? itemEl : itemEl.querySelector('a[href]');
       if (!link) return null;
+      // number/name are read from dedicated [data-series-nav-field="..."]
+      // elements inside the item, since a single link's combined text can't
+      // be split back into separate pieces — text/img stay as whole-link
+      // fallbacks for anyone who doesn't need them split out.
       return {
         href: link.href,
         text: link.textContent.trim(),
-        imgSrc: link.querySelector('img')?.src || itemEl.querySelector('img')?.src || '',
+        number: itemEl.querySelector('[data-series-nav-field="number"]')?.textContent.trim() || '',
+        name: itemEl.querySelector('[data-series-nav-field="name"]')?.textContent.trim() || '',
+        imgSrc: itemEl.querySelector('[data-series-nav-field="img"]')?.src
+          || link.querySelector('img')?.src
+          || itemEl.querySelector('img')?.src
+          || '',
       };
     })
     .filter(Boolean);
+  console.log('[ttlr] series nav: extracted items ->', items);
 
   const currentPath = window.location.pathname.replace(/\/$/, '');
   const currentIndex = items.findIndex((item) => new URL(item.href).pathname.replace(/\/$/, '') === currentPath);
@@ -1168,6 +1178,12 @@ function initSeriesNav(sourceEl) {
   function fillNavContent(direction, item) {
     document.querySelectorAll(`[data-series-nav="${direction}-text"]`).forEach((el) => {
       el.textContent = item ? item.text : '';
+    });
+    document.querySelectorAll(`[data-series-nav="${direction}-number"]`).forEach((el) => {
+      el.textContent = item ? item.number : '';
+    });
+    document.querySelectorAll(`[data-series-nav="${direction}-name"]`).forEach((el) => {
+      el.textContent = item ? item.name : '';
     });
     document.querySelectorAll(`[data-series-nav="${direction}-img"]`).forEach((el) => {
       if (item && item.imgSrc) el.src = item.imgSrc;
