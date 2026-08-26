@@ -39,6 +39,16 @@
   pointer-events: none;
 }
 
+/* Empty-state color for segments not yet reached by the fill. Safe to set
+   directly (no overlap risk): .ttlr_progress_fill is a positioned element
+   (position: absolute above), so by normal CSS stacking rules it always
+   paints above these non-positioned segments regardless of DOM order —
+   wherever the fill's clip-path/mask actually reveal paint, it fully
+   covers this color; everywhere else, this shows through untouched. */
+.ttlr_progress_segment {
+  background-color: #D9D9D9;
+}
+
 /* Series-end success screen: hidden until "Finish Series" is clicked on the last episode */
 .ttlr_series-end_success {
   display: none;
