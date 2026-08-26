@@ -6,6 +6,28 @@
   drag & drop quiz section — see README for the required <script> tag.
 */
 
+// Memberstack's own <script> tag (loaded separately in Webflow, per README) sets
+// window.$memberstackDom, but there's no guarantee it's already set by the time our
+// Webflow.push callbacks run — a one-shot `if (!window.$memberstackDom) return`
+// silently and permanently no-ops for that whole page load if it loses that race.
+// This polls briefly instead of assuming either order.
+function waitForMemberstack(timeoutMs = 5000) {
+  if (window.$memberstackDom) return Promise.resolve(window.$memberstackDom);
+  return new Promise((resolve) => {
+    const start = Date.now();
+    const interval = window.setInterval(() => {
+      if (window.$memberstackDom) {
+        window.clearInterval(interval);
+        resolve(window.$memberstackDom);
+      } else if (Date.now() - start > timeoutMs) {
+        window.clearInterval(interval);
+        console.error('[ttlr] Memberstack was not available after ' + timeoutMs + 'ms — is its <script> tag present and loading?');
+        resolve(null);
+      }
+    }, 100);
+  });
+}
+
 /* ---- Episode router: one visible episode at a time, Prev/Next
    navigation, completion tracking in Memberstack. ---- */
 
@@ -68,9 +90,11 @@ function initEpisodeRouter(listEl) {
   const PROGRESS_FIELD = 'ttl-progress';
 
   async function markComplete(episodeId) {
-    if (!episodeId || !window.$memberstackDom) return;
+    if (!episodeId) return;
+    const ms = await waitForMemberstack();
+    if (!ms) return;
     try {
-      const { data: member } = await window.$memberstackDom.getCurrentMember();
+      const { data: member } = await ms.getCurrentMember();
       if (!member) return; // not logged in — nothing to persist to
 
       let current = {};
@@ -108,7 +132,7 @@ function initEpisodeRouter(listEl) {
         }
       }
 
-      await window.$memberstackDom.updateMember({
+      await ms.updateMember({
         customFields: { [PROGRESS_FIELD]: JSON.stringify(current) },
       });
 
@@ -142,21 +166,17 @@ function initEpisodeRouter(listEl) {
     }
   }
 
-  if (window.$memberstackDom) {
-    window.$memberstackDom.getCurrentMember()
-      .then(({ data: member }) => {
-        const raw = member?.customFields?.[PROGRESS_FIELD];
-        if (!raw) return;
-        try {
-          updateProgressDisplay(JSON.parse(raw).episodes);
-        } catch (parseErr) {
-          console.error('[ttlr] Could not parse existing ' + PROGRESS_FIELD + ' for progress bar', parseErr);
-        }
-      })
-      .catch((err) => {
-        console.error('[ttlr] Failed to read progress for progress bar', err);
-      });
-  }
+  waitForMemberstack().then(async (ms) => {
+    if (!ms) return;
+    try {
+      const { data: member } = await ms.getCurrentMember();
+      const raw = member?.customFields?.[PROGRESS_FIELD];
+      if (!raw) return;
+      updateProgressDisplay(JSON.parse(raw).episodes);
+    } catch (err) {
+      console.error('[ttlr] Failed to read progress for progress bar', err);
+    }
+  });
 
   // ---- Series-end success screen: shown when "Finish Series" is clicked on
   // the last episode (see updateButtonStates / the click-wiring loop below).
@@ -193,9 +213,10 @@ function initEpisodeRouter(listEl) {
   let bookmarksCache = [];
 
   async function loadBookmarks() {
-    if (!window.$memberstackDom) return [];
+    const ms = await waitForMemberstack();
+    if (!ms) return [];
     try {
-      const { data: member } = await window.$memberstackDom.getCurrentMember();
+      const { data: member } = await ms.getCurrentMember();
       if (!member) return [];
       const raw = member.customFields?.[BOOKMARKS_FIELD];
       if (!raw) return [];
@@ -219,11 +240,14 @@ function initEpisodeRouter(listEl) {
     });
 
     bookmarkBtn.addEventListener('click', async () => {
-      if (!window.$memberstackDom || bookmarkBtn.dataset.pending === 'true') return;
+      if (bookmarkBtn.dataset.pending === 'true') return;
       bookmarkBtn.dataset.pending = 'true';
       try {
+        const ms = await waitForMemberstack();
+        if (!ms) return;
+
         const episodeId = idOf(items[currentIndex], currentIndex);
-        const { data: member } = await window.$memberstackDom.getCurrentMember();
+        const { data: member } = await ms.getCurrentMember();
         if (!member) return; // not logged in — nothing to persist to
 
         const bookmarks = await loadBookmarks(); // re-read in case another tab changed it
@@ -232,7 +256,7 @@ function initEpisodeRouter(listEl) {
           ? bookmarks.filter((id) => id !== episodeId)
           : [...bookmarks, episodeId];
 
-        await window.$memberstackDom.updateMember({
+        await ms.updateMember({
           customFields: { [BOOKMARKS_FIELD]: JSON.stringify(next) },
         });
 
