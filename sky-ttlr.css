@@ -79,3 +79,9 @@
   clip: rect(0, 0, 0, 0);
   white-space: nowrap;
 }
+.notes_action_item .notes_action_text {
+  display: none;
+}
+.notes_action_item.is-confirm .notes_action_text {
+  display: flex;
+}
