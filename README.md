@@ -22,10 +22,20 @@ All components below live in `sky-ttlr.js`/`sky-ttlr.css`, each under its own cl
 
 | File | Status |
 |---|---|
-| `sky-ttlr.js` | Delivered — episode router needs `data-series-id` added in Designer, drag-drop quiz currently debugging zone-detection (see below) |
+| `sky-ttlr.js` | Delivered — old inline Custom Code blocks on the live site need removing first, see warning above |
 | `sky-ttlr.css` | Delivered |
 
 All custom behavior lives in these two files now (episode router, progress bar, drag-drop quiz, bookmarks, and notes pad today; swiper and glass-effect will fold in here once added). Webflow references them directly instead of pasting file contents into Custom Code.
+
+## ⚠ Remove the old inline Custom Code blocks
+
+Before anything else: the live site currently has **leftover inline `<script>`/`<style>` blocks pasted directly into Webflow's Custom Code**, from before this project was consolidated into `sky-ttlr.js`/`sky-ttlr.css`. Specifically, blocks headed:
+
+- `<!-- Sky TTLR — Drag & Drop matching quiz (interact.js) -->` (an older, standalone copy)
+- `<!-- Sky TTLR — Episode router: ... -->` (an older, standalone copy)
+- A second, redundant `<script src=".../interactjs/dist/interact.min.js">` tag
+
+These declare functions with the **same names** (`initEpisodeRouter`, `initTtlrDragDrop`) as the ones in `sky-ttlr.js`, and because they load *after* it, they silently overwrite/shadow the real ones — so every fix shipped to `sky-ttlr.js` has had no effect at all on the live site, no matter the version. **Delete those three blocks from Site Settings → Custom Code**, keeping only the jsDelivr `<script>`/`<link>` tags below — then republish.
 
 ## Install
 
@@ -35,13 +45,13 @@ Add to Webflow Site Settings → Custom Code → **Head**:
 
 ```html
 <script src="https://cdn.jsdelivr.net/npm/interactjs/dist/interact.min.js"></script>
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/elisa-sanchez-mb/sky-ttlr@v1.3.2/sky-ttlr.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/elisa-sanchez-mb/sky-ttlr@v1.3.3/sky-ttlr.css">
 ```
 
 Add to Webflow Site Settings → Custom Code → **before `</body>`** (after `webflow.js` and after Memberstack's own script tag):
 
 ```html
-<script src="https://cdn.jsdelivr.net/gh/elisa-sanchez-mb/sky-ttlr@v1.3.2/sky-ttlr.js"></script>
+<script src="https://cdn.jsdelivr.net/gh/elisa-sanchez-mb/sky-ttlr@v1.3.3/sky-ttlr.js"></script>
 ```
 
 `interact.js` is a third-party dependency of the drag-drop quiz and is loaded from its own CDN rather than bundled into `sky-ttlr.js`, so it keeps its own versioning/caching. It's optional at runtime — if it fails to load, the drag-drop quiz no-ops rather than throwing, and the episode router is unaffected.
@@ -55,12 +65,13 @@ Add to Webflow Site Settings → Custom Code → **before `</body>`** (after `we
 These Custom Attributes have to exist on the live markup for the scripts above to work — none of this is optional:
 
 - **`data-episode-id`** on `.ttlr_episode_cms_item` — bind to the item's Item ID (or Slug as fallback). Already present and confirmed working on the live series pages.
-- **`data-series-id`** on `.ttlr_episode_cms_list` (or any ancestor of it — the script walks up with `.closest()`) — bind to the *current* Series item's own Item ID or Slug (this page is that item's own CMS template page). **Not yet added** — without it, per-episode completion still works, but nothing rolls up to series-level completion for the badge.
+- **`data-series-id`** on `.ttlr_episode_cms_list` (or any ancestor of it — the script walks up with `.closest()`) — bind to the *current* Series item's own Item ID or Slug (this page is that item's own CMS template page). **Present** — confirmed on `<main data-series-id="...">` in the live markup.
 - **`data-zone-id`** (static, one per zone: `"1"`–`"4"`) and **`data-correct-zone`** (CMS-bound, per prop) — both already present and correctly assigned by the drag-drop script itself at runtime; nothing to add here.
 - **`.ttlr_dragdrop_drop-zone` needs a real height** in Designer — currently an empty div with no set size, which is very likely why zone drops aren't registering.
 - **`[bookmark="btn"]`** — a single button placed once on the page (not inside each `.ttlr_episode_cms_item`), containing the bookmark ribbon SVG with an `<svg><path>` inside it. The script reads/writes that `<path>`'s `d` attribute directly to switch between outline and filled, so the SVG markup needs to be the actual `<svg>`/`<path>` element, not a background-image or other substitute.
-- **`.notes_copy_success`** inside the `[data-notes-action="copy"]` button — not currently in the Designer markup, so the script auto-creates a placeholder ("Copied!") if it's missing. Add your own in Designer whenever convenient; the script only toggles `.is-active` on whichever one it finds.
+- **`.notes_copy_success`** — searched for anywhere inside the notes component root (it's a *sibling* of `.notes_actions` in the current Designer markup, not nested inside the copy button), with its own `.notes_copy_close` close button wired up automatically if present. Falls back to an auto-created placeholder only if the element is missing entirely.
 - **`.ttlr_series-end_success`** — a single element placed once on the page (like the bookmark button and progress bar), hidden by default. The script only adds `.is-active` to reveal it when "Finish Series" is clicked; content/layout is Designer's.
+- **`.ttlr_progress_fill`'s `--n`/`--i` custom properties** — if Designer's own CSS for this element uses a `background-position-x`/`background-size` trick keyed on `--n` (total steps) and `--i` (current step) — as it currently does, for a rainbow gradient that pans across segments — the script sets both automatically (`--n` = total episodes, `--i` = completed count) alongside the `clip-path` fill percentage. No Designer action needed, just documented here since it's not obvious from the JS alone.
 
 ## Memberstack setup
 
