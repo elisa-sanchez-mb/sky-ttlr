@@ -435,30 +435,31 @@ function initEpisodeRouter(listEl) {
     }
   }
 
-  // Marks the episode being LEFT as complete, in both directions —
-  // additive only, so navigating back with Prev never un-marks anything.
-  function goTo(targetIndex, fromIndex) {
+  // Plain navigation — no completion side effect. Used by Prev, so going
+  // back to re-watch an earlier episode never marks the one you're leaving
+  // as complete (only actively clicking Next on it does that, below).
+  function goTo(targetIndex) {
     if (targetIndex < 0 || targetIndex >= items.length) return;
-    markComplete(idOf(items[fromIndex], fromIndex));
     show(targetIndex);
   }
 
   items.forEach((item, index) => {
     const prevBtn = item.querySelector('.ttlr_episode_button.is-prev');
     const nextBtn = item.querySelector('.ttlr_episode_button.is-next');
-    if (prevBtn) prevBtn.addEventListener('click', () => goTo(index - 1, index));
+    if (prevBtn) prevBtn.addEventListener('click', () => goTo(index - 1));
     if (nextBtn) {
       const isLast = index === items.length - 1;
       nextBtn.addEventListener('click', () => {
         if (isLast) {
           console.log('[ttlr] "Finish Series" clicked on episode index ' + index);
-          // goTo's own bounds check would silently no-op here (targetIndex
-          // out of range) without ever calling markComplete — that was the
-          // actual cause of the last episode never getting marked complete.
           markComplete(idOf(item, index));
           showSeriesEndSuccess();
         } else {
-          goTo(index + 1, index);
+          // Completion happens specifically on Next — landing on an episode
+          // (via URL, Prev, or initial load) never marks it complete, only
+          // actively moving forward past it does.
+          markComplete(idOf(item, index));
+          goTo(index + 1);
         }
       });
     }
