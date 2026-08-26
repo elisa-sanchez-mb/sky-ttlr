@@ -17,9 +17,6 @@ Each file is self-contained and documented inline (top comment block) with exact
 | `sky-ttlr-episode-router.html` | Delivered — needs `data-series-id` added in Designer (see below) |
 | `sky-ttlr-dragdrop-quiz.html` | Delivered — currently debugging zone-detection (see Known issues) |
 
-## Install
-
-For each `.html` file: copy its contents into Webflow Site/Page Settings → Custom Code → **before `</body>`**, after `webflow.js` and after Memberstack's own script tag. A couple of files also need a `<link>`/`<script>` tag added to **Head** — noted at the top of the file itself (`sky-ttlr-series-swiper.html` needs the Swiper CSS in Head; `sky-ttlr-dragdrop-quiz.html` loads interact.js itself, no separate step needed).
 
 ## Required Designer steps
 
