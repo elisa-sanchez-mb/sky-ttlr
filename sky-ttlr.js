@@ -174,14 +174,12 @@ function initEpisodeRouter(listEl) {
     console.log('[ttlr] updateProgressDisplay: ' + completed + '/' + total + ' (' + percent.toFixed(1) + '%)');
 
     if (progressFill) {
+      // Only ever reveals more/less of Designer's own gradient via clip-path —
+      // never touches the gradient itself (background-image, position, size,
+      // etc. are entirely Designer's). Confirmed intent: one continuous
+      // gradient revealed proportionally, cut into pill segments purely by
+      // the mask below — not a per-segment/panned color.
       progressFill.style.clipPath = `inset(0 ${100 - percent}% 0 0)`;
-      // Designer's own inline CSS for .ttlr_progress_fill uses a rainbow
-      // background-image panned via background-position-x, driven by --n
-      // (total steps) and --i (current step) custom properties — this
-      // script doesn't define that visual, just supplies the two variables
-      // it reads: --n = total episodes, --i = completed count.
-      progressFill.style.setProperty('--n', String(total || 1));
-      progressFill.style.setProperty('--i', String(completed));
     }
 
     // Structure is <span>completed</span><span>/</span><span>total</span><span class="...">COMPLETED</span>
