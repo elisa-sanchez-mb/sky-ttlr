@@ -84,6 +84,16 @@
   display: block;
 }
 
+/* Same trigger as .ttlr_series-end_success above — shown together when
+   "Finish Series" is clicked on the last episode. */
+.ttlr_completed_episode_wrap {
+  display: none;
+}
+
+.ttlr_completed_episode_wrap.is-active {
+  display: block;
+}
+
 /* ---- Drag & drop quiz ---- */
 
 .ttlr_dragdrop_prop_item {
@@ -185,5 +195,19 @@ html.ttlr-is-resizing * {
 }
 
 .notes_copy_success.is-active {
-  display: block;
+  display: flex;
+}
+
+/* ---- Series navigation ---- */
+
+/* The lookup list must always be hidden — enforced here rather than left to
+   Designer, so it can never accidentally render visible. */
+[data-series-nav="source"] {
+  display: none;
+}
+
+[data-series-nav$="-btn"].is-disabled {
+  opacity: 0.4;
+  cursor: default;
+  pointer-events: none;
 }
