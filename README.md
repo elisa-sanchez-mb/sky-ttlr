@@ -10,21 +10,12 @@ Each file is self-contained and documented inline (top comment block) with exact
 
 **`sky-ttlr-dragdrop-quiz.html`** is a matching quiz built on interact.js: each "prop" is draggable, and it only actually leaves the tray and gets placed in the DOM when it's dropped on its correct, still-empty zone (`data-correct-zone` on the prop must match `data-zone-id` on the zone) — every other drop just snaps back to the tray with a reject flash, so there's no fail state and unlimited retries. It also ships a full keyboard path (Tab to a prop, Enter to grab it, Tab to a zone, Enter to attempt the drop, Escape to cancel) and an `aria-live` region that announces placements and rejections, so it doesn't depend on drag gestures to be usable. Once every prop is correctly placed it fires a `ttlr:quizCompleted` custom event that other code can listen for.
 
-**`sky-ttlr-series-swiper.html`** *(not yet added to this repo)* — a Swiper carousel for the CMS-bound series list.
-
-**`sky-ttlr-glass-effect.html`** *(not yet added to this repo)* — a CSS-only "Glass" layer effect, ported 1:1 from a Figma effect panel.
-
-**`sky-ttlr-progress-badges-bookmarks.md`** *(not yet added to this repo)* — the original architecture writeup for progress/badges/bookmarks storage. Already known to be outdated before it's even added — see the Memberstack correction below.
-
 ## Files
 
 | File | Status |
 |---|---|
 | `sky-ttlr-episode-router.html` | Delivered — needs `data-series-id` added in Designer (see below) |
 | `sky-ttlr-dragdrop-quiz.html` | Delivered — currently debugging zone-detection (see Known issues) |
-| `sky-ttlr-series-swiper.html` | Not yet added to this repo |
-| `sky-ttlr-glass-effect.html` | Not yet added to this repo |
-| `sky-ttlr-progress-badges-bookmarks.md` | Not yet added to this repo — **outdated, see correction below** |
 
 ## Install
 
@@ -47,12 +38,3 @@ Progress and bookmarks use two **Custom Fields** (Memberstack Dashboard → Sett
 - **`ttl-bookmarks`** — JSON-stringified array of bookmarked episode Item IDs
 
 Both fields need to be created in the Memberstack dashboard before the scripts above go live. Read/write happens via `getCurrentMember()` + `updateMember({ customFields: {...} })`.
-
-**Correction:** `sky-ttlr-progress-badges-bookmarks.md` in this repo still documents the *earlier* plan — Memberstack's separate Member JSON feature (`getMemberJSON()`/`updateMemberJSON()`), keyed under a single `ttl` object. That approach was superseded in favor of matching the launcher's actual Custom Field pattern above. `sky-ttlr-episode-router.html` already implements the corrected version; the `.md` doc itself hasn't been rewritten yet — treat the code as the source of truth until it is.
-
-## Known issues
-
-- **Drag-drop zones not accepting drops.** Root cause under investigation: `.ttlr_dragdrop_drop-zone` renders as a 0-height empty div until Designer gives it real dimensions, which likely prevents interact.js's overlap check (currently `overlap: 0.4`, i.e. 40% of the prop must overlap the zone) from ever registering a valid drop against a zone with no area. Switching to `overlap: 'pointer'` would be more forgiving of a small zone, but doesn't fix a zone with *zero* height — Designer giving the zone a real size is the actual fix needed.
-- **Last episode's Next button** has nowhere to go yet — no "next series" reference/link exists in the current markup, so it's disabled at the last episode rather than pointing somewhere made up.
-- **Nothing marks the last episode in a series complete** — completion is currently only triggered by a Prev/Next click, which by definition never fires on the last screen. Needs a video-end, quiz-submit, or explicit "Finish" trigger instead.
-- **Series completion badge isn't wired up yet.** `ttl-progress.series[seriesId]` gets written correctly once every episode in a series is complete, but whatever renders the actual badge (the `ttlr_completion_tag-wrap` element) hasn't been updated to read it — that script wasn't shared in this session.
