@@ -79,9 +79,31 @@
   clip: rect(0, 0, 0, 0);
   white-space: nowrap;
 }
+
+/* ---- Notes pad ---- */
+
+.notes_drag_line {
+  cursor: col-resize;
+  touch-action: none; /* required for reliable pointer dragging on touch, same as the quiz props */
+}
+
+/* Suppresses text selection site-wide while actively dragging the resize handle */
+html.ttlr-is-resizing,
+html.ttlr-is-resizing * {
+  user-select: none !important;
+}
+
 .notes_action_item .notes_action_text {
   display: none;
 }
 .notes_action_item.is-confirm .notes_action_text {
   display: flex;
+}
+
+.notes_copy_success {
+  display: none;
+}
+
+.notes_copy_success.is-active {
+  display: block;
 }

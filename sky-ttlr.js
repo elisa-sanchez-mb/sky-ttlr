@@ -550,3 +550,144 @@ function initTtlrDragDrop(root) {
     return liveEl;
   }
 }
+
+/* ---- Notes pad: resizable, localStorage-backed notepad. Content is a
+   single shared note (not per-page), so it's the same everywhere this
+   Webflow component is placed — localStorage is already global per
+   browser/domain, so no page-scoping is needed for that to work. ---- */
+
+window.Webflow ||= [];
+window.Webflow.push(function () {
+  document.querySelectorAll('.notes_component_wrap').forEach(initNotesPad);
+});
+
+function initNotesPad(root) {
+  const CONTENT_KEY = 'ttlr-notes-content';
+  const WIDTH_KEY = 'ttlr-notes-width';
+  const MIN_WIDTH = 280; // functional floor — narrower than this and the textarea stops being usable
+  const VIEWPORT_MARGIN = 64; // keep the pad from ever fully covering the viewport
+
+  const textarea = root.querySelector('.ttlr_notes_text-area');
+  const dragLine = root.querySelector('.notes_drag_line');
+  const form = root.querySelector('.ttlr_notes_form');
+  const deleteBtn = root.querySelector('[data-notes-action="delete"]');
+  const copyBtn = root.querySelector('[data-notes-action="copy"]');
+
+  // This textarea lives inside a Webflow form component (for its built-in styling/
+  // maxlength), but it's not meant to actually submit anywhere — guard against that.
+  if (form) form.addEventListener('submit', (e) => e.preventDefault());
+
+  function loadContent() {
+    try {
+      return window.localStorage.getItem(CONTENT_KEY) || '';
+    } catch (err) {
+      console.error('[ttlr] Failed to read notes from localStorage', err);
+      return '';
+    }
+  }
+
+  function saveContent(value) {
+    try {
+      window.localStorage.setItem(CONTENT_KEY, value);
+    } catch (err) {
+      console.error('[ttlr] Failed to save notes to localStorage', err);
+    }
+  }
+
+  // If this component happens to appear more than once on the same page, keep every
+  // instance's textarea showing the same content without moving anyone's caret/focus.
+  function syncOtherInstances(value, exceptTextarea) {
+    document.querySelectorAll('.ttlr_notes_text-area').forEach((el) => {
+      if (el !== exceptTextarea && el.value !== value) el.value = value;
+    });
+  }
+
+  if (textarea) {
+    textarea.value = loadContent();
+    textarea.addEventListener('input', () => {
+      saveContent(textarea.value);
+      syncOtherInstances(textarea.value, textarea);
+    });
+  }
+
+  // ---- Copy: copies the note to the clipboard, flashes .notes_copy_success ----
+  if (copyBtn) {
+    let successEl = copyBtn.querySelector('.notes_copy_success');
+    if (!successEl) {
+      // Not present in the Designer markup as of writing — auto-created so copy still
+      // gives feedback out of the box. Add your own .notes_copy_success element (and
+      // restyle/reword this one) in Designer any time; the script only toggles .is-active.
+      successEl = document.createElement('div');
+      successEl.className = 'notes_copy_success';
+      successEl.textContent = 'Copied!';
+      copyBtn.appendChild(successEl);
+    }
+
+    copyBtn.addEventListener('click', async () => {
+      if (!textarea) return;
+      try {
+        await navigator.clipboard.writeText(textarea.value);
+        successEl.classList.add('is-active');
+        window.setTimeout(() => successEl.classList.remove('is-active'), 2000);
+      } catch (err) {
+        console.error('[ttlr] Failed to copy notes to clipboard', err);
+      }
+    });
+  }
+
+  // ---- Delete: first click arms .is-confirm, second click actually clears ----
+  if (deleteBtn) {
+    deleteBtn.addEventListener('click', () => {
+      if (!deleteBtn.classList.contains('is-confirm')) {
+        deleteBtn.classList.add('is-confirm');
+        return;
+      }
+      if (textarea) textarea.value = '';
+      saveContent('');
+      syncOtherInstances('', textarea);
+      deleteBtn.classList.remove('is-confirm');
+    });
+  }
+
+  // ---- Drag line: resizes the pad by dragging its left edge ----
+  // Assumes the pad is anchored to the right (drag_line sits before notes_pad in the
+  // DOM, i.e. on its left edge), so dragging left grows it and dragging right shrinks
+  // it. If the pad is actually anchored left, flip the sign in onPointerMove below.
+  if (dragLine) {
+    let startX = 0;
+    let startWidth = 0;
+
+    function onPointerMove(e) {
+      const delta = e.clientX - startX;
+      const maxWidth = window.innerWidth - VIEWPORT_MARGIN;
+      const nextWidth = Math.min(maxWidth, Math.max(MIN_WIDTH, startWidth - delta));
+      root.style.width = `${nextWidth}px`;
+    }
+
+    function onPointerUp() {
+      document.removeEventListener('pointermove', onPointerMove);
+      document.removeEventListener('pointerup', onPointerUp);
+      document.documentElement.classList.remove('ttlr-is-resizing');
+      try {
+        window.localStorage.setItem(WIDTH_KEY, root.style.width);
+      } catch (err) {
+        console.error('[ttlr] Failed to save notes pad width to localStorage', err);
+      }
+    }
+
+    dragLine.addEventListener('pointerdown', (e) => {
+      startX = e.clientX;
+      startWidth = root.getBoundingClientRect().width;
+      document.documentElement.classList.add('ttlr-is-resizing'); // suppress text selection while dragging
+      document.addEventListener('pointermove', onPointerMove);
+      document.addEventListener('pointerup', onPointerUp);
+    });
+
+    try {
+      const savedWidth = window.localStorage.getItem(WIDTH_KEY);
+      if (savedWidth) root.style.width = savedWidth;
+    } catch (err) {
+      console.error('[ttlr] Failed to read notes pad width from localStorage', err);
+    }
+  }
+}
