@@ -12,12 +12,17 @@
 // silently and permanently no-ops for that whole page load if it loses that race.
 // This polls briefly instead of assuming either order.
 function waitForMemberstack(timeoutMs = 5000) {
-  if (window.$memberstackDom) return Promise.resolve(window.$memberstackDom);
+  if (window.$memberstackDom) {
+    console.log('[ttlr] waitForMemberstack: already available');
+    return Promise.resolve(window.$memberstackDom);
+  }
+  console.log('[ttlr] waitForMemberstack: not yet available, polling…');
   return new Promise((resolve) => {
     const start = Date.now();
     const interval = window.setInterval(() => {
       if (window.$memberstackDom) {
         window.clearInterval(interval);
+        console.log('[ttlr] waitForMemberstack: became available after ' + (Date.now() - start) + 'ms');
         resolve(window.$memberstackDom);
       } else if (Date.now() - start > timeoutMs) {
         window.clearInterval(interval);
@@ -33,12 +38,18 @@ function waitForMemberstack(timeoutMs = 5000) {
 
 window.Webflow ||= [];
 window.Webflow.push(function () {
-  document.querySelectorAll('.ttlr_episode_cms_list').forEach(initEpisodeRouter);
+  const lists = document.querySelectorAll('.ttlr_episode_cms_list');
+  console.log('[ttlr] episode router: found ' + lists.length + ' .ttlr_episode_cms_list element(s) on this page');
+  lists.forEach(initEpisodeRouter);
 });
 
 function initEpisodeRouter(listEl) {
   const items = Array.from(listEl.querySelectorAll('.ttlr_episode_cms_item'));
-  if (!items.length) return;
+  console.log('[ttlr] initEpisodeRouter: found ' + items.length + ' .ttlr_episode_cms_item inside this list', listEl);
+  if (!items.length) {
+    console.warn('[ttlr] initEpisodeRouter: bailing out, no .ttlr_episode_cms_item found — nothing in this section (episode paging, bookmarks, progress bar) will run.');
+    return;
+  }
 
   let currentIndex = 0;
 
@@ -90,11 +101,13 @@ function initEpisodeRouter(listEl) {
   const PROGRESS_FIELD = 'ttl-progress';
 
   async function markComplete(episodeId) {
+    console.log('[ttlr] markComplete called for episode', episodeId);
     if (!episodeId) return;
     const ms = await waitForMemberstack();
     if (!ms) return;
     try {
       const { data: member } = await ms.getCurrentMember();
+      console.log('[ttlr] markComplete: current member is', member ? member.id : 'NOT LOGGED IN');
       if (!member) return; // not logged in — nothing to persist to
 
       let current = {};
@@ -135,6 +148,7 @@ function initEpisodeRouter(listEl) {
       await ms.updateMember({
         customFields: { [PROGRESS_FIELD]: JSON.stringify(current) },
       });
+      console.log('[ttlr] markComplete: wrote ' + PROGRESS_FIELD + ' to Memberstack', current);
 
       updateProgressDisplay(current.episodes);
     } catch (err) {
@@ -143,18 +157,24 @@ function initEpisodeRouter(listEl) {
   }
 
   // ---- Progress bar: global (one per page, not per-episode) completed/total
-  // display for this series. The CMS-bound .ttlr_progress_segment items are a
-  // purely visual mask over .ttlr_progress_fill (see sky-ttlr.css) — they don't
-  // need to match the episode count, so this only ever needs a fill percentage.
+  // display for this series. The fill percentage is applied via clip-path
+  // (not width) so .ttlr_progress_fill's own box never changes size — that
+  // matters because the segment mask below is computed in percentages of
+  // THIS element's own box, and a mask-image's percentages are relative to
+  // the masked element's current size. If width itself drove the fill %,
+  // the mask would misalign every time the percentage changed.
   const progressFill = document.querySelector('.ttlr_progress_fill');
   const progressP = document.querySelector('.ttlr_episode_progress_p');
+  console.log('[ttlr] progress bar: .ttlr_progress_fill', progressFill, '/ .ttlr_episode_progress_p', progressP);
 
   function updateProgressDisplay(episodesProgress) {
     const total = items.length;
     const completed = items.filter((item, i) => episodesProgress?.[idOf(item, i)]?.completed).length;
+    const percent = total ? (completed / total) * 100 : 0;
+    console.log('[ttlr] updateProgressDisplay: ' + completed + '/' + total + ' (' + percent.toFixed(1) + '%)');
 
     if (progressFill) {
-      progressFill.style.width = `${total ? (completed / total) * 100 : 0}%`;
+      progressFill.style.clipPath = `inset(0 ${100 - percent}% 0 0)`;
     }
 
     // Structure is <span>completed</span><span>/</span><span>total</span><span class="...">COMPLETED</span>
@@ -166,11 +186,61 @@ function initEpisodeRouter(listEl) {
     }
   }
 
+  // ---- Segment mask: measures each .ttlr_progress_segment's ACTUAL rendered
+  // position (whatever Designer's own layout/CSS produces — flex, grid,
+  // gaps, anything) and builds a matching mask-image on .ttlr_progress_fill,
+  // rather than assuming a specific CSS stacking/background trick. This is
+  // what makes the fill only show through where the segments are.
+  function updateProgressMask() {
+    if (!progressFill) return;
+    const segmentEls = Array.from(document.querySelectorAll('.ttlr_progress_segment'));
+    console.log('[ttlr] updateProgressMask: found ' + segmentEls.length + ' .ttlr_progress_segment element(s)');
+    if (!segmentEls.length) return;
+
+    const fillRect = progressFill.getBoundingClientRect();
+    if (!fillRect.width) {
+      console.warn('[ttlr] updateProgressMask: .ttlr_progress_fill has zero width, skipping — is it hidden or unstyled?');
+      return;
+    }
+
+    const stops = [];
+    let cursor = 0;
+    segmentEls
+      .map((seg) => seg.getBoundingClientRect())
+      .sort((a, b) => a.left - b.left)
+      .forEach((segRect) => {
+        const startPct = Math.max(0, ((segRect.left - fillRect.left) / fillRect.width) * 100);
+        const endPct = Math.min(100, ((segRect.right - fillRect.left) / fillRect.width) * 100);
+        if (endPct <= cursor) return; // overlapping/degenerate — skip
+        stops.push(`transparent ${cursor}%`, `transparent ${startPct}%`, `black ${startPct}%`, `black ${endPct}%`);
+        cursor = endPct;
+      });
+    stops.push(`transparent ${cursor}%`, `transparent 100%`);
+
+    const gradient = `linear-gradient(to right, ${stops.join(', ')})`;
+    progressFill.style.maskImage = gradient;
+    progressFill.style.webkitMaskImage = gradient;
+    console.log('[ttlr] updateProgressMask: applied mask-image', gradient);
+  }
+
+  if (progressFill) {
+    // Segment positions can shift after Webflow's own render pass settles
+    // (CMS lists, fonts loading, etc.) — rAF + a short delayed re-check
+    // catches that without needing a full ResizeObserver setup.
+    requestAnimationFrame(updateProgressMask);
+    window.setTimeout(updateProgressMask, 500);
+    window.addEventListener('resize', () => {
+      window.clearTimeout(progressFill._ttlrResizeTimer);
+      progressFill._ttlrResizeTimer = window.setTimeout(updateProgressMask, 150);
+    });
+  }
+
   waitForMemberstack().then(async (ms) => {
     if (!ms) return;
     try {
       const { data: member } = await ms.getCurrentMember();
       const raw = member?.customFields?.[PROGRESS_FIELD];
+      console.log('[ttlr] progress bar: initial ' + PROGRESS_FIELD + ' raw value from Memberstack:', raw);
       if (!raw) return;
       updateProgressDisplay(JSON.parse(raw).episodes);
     } catch (err) {
@@ -191,6 +261,10 @@ function initEpisodeRouter(listEl) {
   // write never contend over the same field's read-modify-write cycle.
   const BOOKMARKS_FIELD = 'ttl-bookmarks';
   const bookmarkBtn = document.querySelector('[bookmark="btn"]');
+  console.log('[ttlr] bookmarks: [bookmark="btn"] element', bookmarkBtn);
+  if (!bookmarkBtn) {
+    console.warn('[ttlr] bookmarks: no element matches [bookmark="btn"] on this page — bookmark button will not do anything until that attribute exists in Designer.');
+  }
 
   // The provided icon is a single path drawn with two subpaths + evenodd fill, which
   // renders as a hollow/outline ribbon (the second subpath is the outer boundary, the
@@ -202,7 +276,12 @@ function initEpisodeRouter(listEl) {
   function setBookmarkVisual(isBookmarked) {
     if (!bookmarkBtn) return;
     const path = bookmarkBtn.querySelector('svg path');
-    if (path) path.setAttribute('d', isBookmarked ? BOOKMARK_SOLID_D : BOOKMARK_OUTLINE_D);
+    console.log('[ttlr] setBookmarkVisual(' + isBookmarked + ') — svg path found:', !!path);
+    if (!path) {
+      console.warn('[ttlr] bookmarks: [bookmark="btn"] has no <svg><path> inside it — the fill toggle has nothing to update. Check the SVG markup is a real <svg>/<path>, not a background-image.');
+      return;
+    }
+    path.setAttribute('d', isBookmarked ? BOOKMARK_SOLID_D : BOOKMARK_OUTLINE_D);
     bookmarkBtn.classList.toggle('is-bookmarked', isBookmarked);
     bookmarkBtn.setAttribute('aria-pressed', String(isBookmarked));
   }
@@ -217,8 +296,10 @@ function initEpisodeRouter(listEl) {
     if (!ms) return [];
     try {
       const { data: member } = await ms.getCurrentMember();
+      console.log('[ttlr] loadBookmarks: current member is', member ? member.id : 'NOT LOGGED IN');
       if (!member) return [];
       const raw = member.customFields?.[BOOKMARKS_FIELD];
+      console.log('[ttlr] loadBookmarks: raw ' + BOOKMARKS_FIELD + ' value from Memberstack:', raw);
       if (!raw) return [];
       try {
         const parsed = JSON.parse(raw);
@@ -235,12 +316,17 @@ function initEpisodeRouter(listEl) {
 
   if (bookmarkBtn) {
     loadBookmarks().then((bookmarks) => {
+      console.log('[ttlr] bookmarks: initial load ->', bookmarks);
       bookmarksCache = bookmarks;
       setBookmarkVisual(bookmarksCache.includes(idOf(items[currentIndex], currentIndex)));
     });
 
     bookmarkBtn.addEventListener('click', async () => {
-      if (bookmarkBtn.dataset.pending === 'true') return;
+      console.log('[ttlr] bookmark button clicked');
+      if (bookmarkBtn.dataset.pending === 'true') {
+        console.log('[ttlr] bookmark click ignored — a previous click is still in flight');
+        return;
+      }
       bookmarkBtn.dataset.pending = 'true';
       try {
         const ms = await waitForMemberstack();
@@ -248,6 +334,7 @@ function initEpisodeRouter(listEl) {
 
         const episodeId = idOf(items[currentIndex], currentIndex);
         const { data: member } = await ms.getCurrentMember();
+        console.log('[ttlr] bookmark click: current member is', member ? member.id : 'NOT LOGGED IN', '/ episodeId', episodeId);
         if (!member) return; // not logged in — nothing to persist to
 
         const bookmarks = await loadBookmarks(); // re-read in case another tab changed it
@@ -259,6 +346,7 @@ function initEpisodeRouter(listEl) {
         await ms.updateMember({
           customFields: { [BOOKMARKS_FIELD]: JSON.stringify(next) },
         });
+        console.log('[ttlr] bookmark click: wrote ' + BOOKMARKS_FIELD + ' to Memberstack ->', next);
 
         bookmarksCache = next;
         setBookmarkVisual(!isBookmarked);
@@ -358,6 +446,7 @@ function initEpisodeRouter(listEl) {
       const isLast = index === items.length - 1;
       nextBtn.addEventListener('click', () => {
         if (isLast) {
+          console.log('[ttlr] "Finish Series" clicked on episode index ' + index);
           // goTo's own bounds check would silently no-op here (targetIndex
           // out of range) without ever calling markComplete — that was the
           // actual cause of the last episode never getting marked complete.
@@ -384,8 +473,13 @@ function initEpisodeRouter(listEl) {
 
 window.Webflow ||= [];
 window.Webflow.push(function () {
-  if (typeof interact === 'undefined') return; // interact.js failed to load — fail quietly rather than throw
-  document.querySelectorAll('.ttlr_dragdrop_wrap').forEach(initTtlrDragDrop);
+  if (typeof interact === 'undefined') {
+    console.warn('[ttlr] drag-drop quiz: interact.js is not loaded (typeof interact === "undefined") — check its <script> tag is present and loads before this file.');
+    return;
+  }
+  const wraps = document.querySelectorAll('.ttlr_dragdrop_wrap');
+  console.log('[ttlr] drag-drop quiz: found ' + wraps.length + ' .ttlr_dragdrop_wrap element(s) on this page');
+  wraps.forEach(initTtlrDragDrop);
 });
 
 function initTtlrDragDrop(root) {
@@ -393,8 +487,12 @@ function initTtlrDragDrop(root) {
   const props = Array.from(root.querySelectorAll('.ttlr_dragdrop_prop_item[data-correct-zone]'));
   const resetBtn = root.querySelector('.ttlr_dragdrop_reset');
   const live = ensureLiveRegion(root);
+  console.log('[ttlr] initTtlrDragDrop: tray', tray, '/ ' + props.length + ' prop(s) with data-correct-zone');
 
-  if (!tray || !props.length) return;
+  if (!tray || !props.length) {
+    console.warn('[ttlr] initTtlrDragDrop: bailing out — missing .ttlr_dragdrop_props_wrap or no .ttlr_dragdrop_prop_item[data-correct-zone] found.');
+    return;
+  }
 
   let complete = false;
 
@@ -420,6 +518,8 @@ function initTtlrDragDrop(root) {
 
     zones.set(zoneId, { wrapperEl, slotEl, label: labelText });
   });
+  console.log('[ttlr] drag-drop: zone registry ->', Array.from(zones.keys()));
+  console.log('[ttlr] drag-drop: prop correctZone values ->', props.map((p) => p.dataset.correctZone));
 
   tray.dataset.dropRole = 'tray';
   tray.setAttribute('tabindex', '0');
@@ -485,6 +585,7 @@ function initTtlrDragDrop(root) {
 
     const isCorrectZone = targetEl.dataset.zoneId === propEl.dataset.correctZone;
     const isOccupied = !!occupantOf(targetEl);
+    console.log('[ttlr] drag-drop: dropped prop (correctZone=' + propEl.dataset.correctZone + ') onto zone ' + targetEl.dataset.zoneId + ' — correctZone match: ' + isCorrectZone + ', occupied: ' + isOccupied);
 
     if (!isCorrectZone || isOccupied) {
       resetTransform(propEl); // reject — snaps back to its exact spot, nothing moved
@@ -574,7 +675,14 @@ function initTtlrDragDrop(root) {
   dropTargets.forEach((targetEl) => {
     interact(targetEl).dropzone({
       accept: '.ttlr_dragdrop_prop_item',
-      overlap: 0.4,
+      // 'pointer' checks whether the cursor/touch point itself is inside the
+      // target rect, rather than requiring the dragged element to cover a %
+      // of the target's area (that was overlap: 0.4 — far too strict for a
+      // small/thin .ttlr_dragdrop_drop-zone box, which is what was causing
+      // correct drops to register as misses). Designer still needs the zone
+      // to have real height/width — a genuinely 0-size target has no area
+      // for the pointer to be "inside" either way.
+      overlap: 'pointer',
       ondragenter(event) {
         event.target.classList.add('drop-hover');
       },
@@ -715,6 +823,7 @@ function initNotesPad(root) {
     }
 
     copyBtn.addEventListener('click', async () => {
+      console.log('[ttlr] notes: copy clicked');
       if (!textarea) return;
       try {
         await navigator.clipboard.writeText(textarea.value);
@@ -729,6 +838,7 @@ function initNotesPad(root) {
   // ---- Delete: first click arms .is-confirm, second click actually clears ----
   if (deleteBtn) {
     deleteBtn.addEventListener('click', () => {
+      console.log('[ttlr] notes: delete clicked, armed:', deleteBtn.classList.contains('is-confirm'));
       if (!deleteBtn.classList.contains('is-confirm')) {
         deleteBtn.classList.add('is-confirm');
         return;
