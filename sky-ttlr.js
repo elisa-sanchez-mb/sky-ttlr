@@ -52,6 +52,7 @@ function initEpisodeRouter(listEl) {
   }
 
   let currentIndex = 0;
+  let hasShownOnce = false; // first show() is an instant cut, not a crossfade — nothing to fade from yet
 
   function numberOf(item) {
     const span = item.querySelector('.ttlr_episode_col_left-number');
@@ -99,61 +100,118 @@ function initEpisodeRouter(listEl) {
   // write cycles against the same field, which can race and clobber a badge/
   // bookmark write with a stale episodes object or vice versa.
   const PROGRESS_FIELD = 'ttl-progress';
+  const PROGRESS_LOCAL_KEY = 'ttlr-progress-local';
+  // Matches the stacked-apps launcher's own SAVE_WAIT_MS — same reasoning:
+  // collapse rapid changes into a single Memberstack write instead of one per click.
+  const SAVE_DEBOUNCE_MS = 500;
 
-  async function markComplete(episodeId) {
+  function loadLocalProgress() {
+    try {
+      return JSON.parse(window.localStorage.getItem(PROGRESS_LOCAL_KEY)) || {};
+    } catch (err) {
+      console.error('[ttlr] Failed to read local progress cache', err);
+      return {};
+    }
+  }
+
+  function saveLocalProgress(data) {
+    try {
+      window.localStorage.setItem(PROGRESS_LOCAL_KEY, JSON.stringify(data));
+    } catch (err) {
+      console.error('[ttlr] Failed to save local progress cache', err);
+    }
+  }
+
+  // Additive merge: a completion recorded on EITHER side wins. Completion
+  // never gets un-set by merging, only added — safe regardless of which
+  // side (local cache vs Memberstack) is "newer".
+  function mergeCompletionMaps(a, b) {
+    const merged = { ...(a || {}) };
+    Object.keys(b || {}).forEach((key) => {
+      if (!merged[key] || (b[key]?.completed && !merged[key].completed)) merged[key] = b[key];
+    });
+    return merged;
+  }
+
+  // Local-first: read the cache synchronously so completion/progress state is
+  // available instantly, before Memberstack has even started loading (same
+  // pattern as the stacked-apps launcher's local-first render).
+  let progressCache = loadLocalProgress();
+  progressCache.episodes = progressCache.episodes || {};
+
+  let progressSaveTimer = null;
+  function saveProgressToMemberstackDebounced() {
+    window.clearTimeout(progressSaveTimer);
+    progressSaveTimer = window.setTimeout(async () => {
+      const ms = await waitForMemberstack();
+      if (!ms) return;
+      try {
+        const { data: member } = await ms.getCurrentMember();
+        if (!member) return; // not logged in — nothing to persist to
+
+        // Merge with whatever's on the server right now (not a blind
+        // overwrite), in case another tab/device wrote since we last hydrated.
+        let remote = {};
+        const raw = member.customFields?.[PROGRESS_FIELD];
+        if (raw) {
+          try {
+            remote = JSON.parse(raw);
+          } catch (parseErr) {
+            console.error('[ttlr] Could not parse existing ' + PROGRESS_FIELD + ', overwriting with local', parseErr);
+          }
+        }
+        const merged = {
+          episodes: mergeCompletionMaps(remote.episodes, progressCache.episodes),
+          series: mergeCompletionMaps(remote.series, progressCache.series),
+        };
+        progressCache = merged;
+        saveLocalProgress(merged);
+
+        await ms.updateMember({
+          customFields: { [PROGRESS_FIELD]: JSON.stringify(merged) },
+        });
+        console.log('[ttlr] progress: synced to Memberstack ->', merged);
+        updateProgressDisplay(merged.episodes);
+      } catch (err) {
+        console.error('[ttlr] Failed to save episode completion to Memberstack', err);
+      }
+    }, SAVE_DEBOUNCE_MS);
+  }
+
+  // Updates local state + the visual instantly; the Memberstack write happens
+  // afterward, debounced, in the background — no network round-trip on the
+  // click path, so the UI never waits on it.
+  function markComplete(episodeId) {
     console.log('[ttlr] markComplete called for episode', episodeId);
     if (!episodeId) return;
-    const ms = await waitForMemberstack();
-    if (!ms) return;
-    try {
-      const { data: member } = await ms.getCurrentMember();
-      console.log('[ttlr] markComplete: current member is', member ? member.id : 'NOT LOGGED IN');
-      if (!member) return; // not logged in — nothing to persist to
+    if (progressCache.episodes[episodeId]?.completed) return; // already done, nothing to do
 
-      let current = {};
-      const raw = member.customFields?.[PROGRESS_FIELD];
-      if (raw) {
-        try {
-          current = JSON.parse(raw);
-        } catch (parseErr) {
-          console.error('[ttlr] Could not parse existing ' + PROGRESS_FIELD + ', starting fresh', parseErr);
-        }
+    progressCache.episodes[episodeId] = {
+      ...(progressCache.episodes[episodeId] || {}),
+      completed: true,
+      completedAt: new Date().toISOString(),
+    };
+
+    // ---- Roll up to series-level completion (this drives the badge) ----
+    // Complete once every episode currently rendered in THIS series' own
+    // list is marked complete. They all belong to the same series (see
+    // resolveSeriesId above), so this is just a check against ids already
+    // on the page — no extra fetch needed.
+    if (seriesId) {
+      progressCache.series = progressCache.series || {};
+      const allComplete = items.every((item, i) => progressCache.episodes[idOf(item, i)]?.completed);
+      if (allComplete && !progressCache.series[seriesId]?.completed) {
+        progressCache.series[seriesId] = {
+          completed: true,
+          completedAt: new Date().toISOString(),
+        };
       }
-      current.episodes = current.episodes || {};
-
-      if (current.episodes[episodeId]?.completed) return; // already done, no write needed
-
-      current.episodes[episodeId] = {
-        ...(current.episodes[episodeId] || {}),
-        completed: true,
-        completedAt: new Date().toISOString(),
-      };
-
-      // ---- Roll up to series-level completion (this drives the badge) ----
-      // Complete once every episode currently rendered in THIS series' own
-      // list is marked complete. They all belong to the same series (see
-      // resolveSeriesId above), so this is just a check against ids already
-      // on the page — no extra fetch needed.
-      if (seriesId) {
-        current.series = current.series || {};
-        const allComplete = items.every((item, i) => current.episodes[idOf(item, i)]?.completed);
-        if (allComplete && !current.series[seriesId]?.completed) {
-          current.series[seriesId] = {
-            completed: true,
-            completedAt: new Date().toISOString(),
-          };
-        }
-      }
-
-      await ms.updateMember({
-        customFields: { [PROGRESS_FIELD]: JSON.stringify(current) },
-      });
-      console.log('[ttlr] markComplete: wrote ' + PROGRESS_FIELD + ' to Memberstack', current);
-
-      updateProgressDisplay(current.episodes);
-    } catch (err) {
-      console.error('[ttlr] Failed to save episode completion to Memberstack', err);
     }
+
+    saveLocalProgress(progressCache);
+    updateProgressDisplay(progressCache.episodes);
+    console.log('[ttlr] markComplete: local state updated instantly, Memberstack sync queued', progressCache);
+    saveProgressToMemberstackDebounced();
   }
 
   // ---- Progress bar: global (one per page, not per-episode) completed/total
@@ -166,6 +224,8 @@ function initEpisodeRouter(listEl) {
   const progressFill = document.querySelector('.ttlr_progress_fill');
   const progressP = document.querySelector('.ttlr_episode_progress_p');
   console.log('[ttlr] progress bar: .ttlr_progress_fill', progressFill, '/ .ttlr_episode_progress_p', progressP);
+
+  let lastProgressPercent = null; // null = no comparison basis yet, so the first paint never "pulses"
 
   function updateProgressDisplay(episodesProgress) {
     const total = items.length;
@@ -180,6 +240,16 @@ function initEpisodeRouter(listEl) {
       // gradient revealed proportionally, cut into pill segments purely by
       // the mask below — not a per-segment/panned color.
       progressFill.style.clipPath = `inset(0 ${100 - percent}% 0 0)`;
+
+      // Brief pulse on a genuine increase only (not on the initial paint, and
+      // not on every re-render) — see .is-updated in sky-ttlr.css. Uses
+      // filter (brightness), not background, so it still never touches
+      // Designer's gradient.
+      if (lastProgressPercent !== null && percent > lastProgressPercent) {
+        progressFill.classList.add('is-updated');
+        window.setTimeout(() => progressFill.classList.remove('is-updated'), 500);
+      }
+      lastProgressPercent = percent;
     }
 
     // Structure is <span>completed</span><span>/</span><span>total</span><span class="...">COMPLETED</span>
@@ -190,6 +260,9 @@ function initEpisodeRouter(listEl) {
       if (counts[2]) counts[2].textContent = String(total);
     }
   }
+
+  // Instant paint from the local cache — no waiting on Memberstack.
+  updateProgressDisplay(progressCache.episodes);
 
   // ---- Segment mask: measures each .ttlr_progress_segment's ACTUAL rendered
   // position (whatever Designer's own layout/CSS produces — flex, grid,
@@ -240,14 +313,25 @@ function initEpisodeRouter(listEl) {
     });
   }
 
+  // Hydrate from Memberstack in the background and merge additively — picks
+  // up completions recorded on another device/session, without blocking the
+  // instant local-cache paint above.
   waitForMemberstack().then(async (ms) => {
     if (!ms) return;
     try {
       const { data: member } = await ms.getCurrentMember();
-      const raw = member?.customFields?.[PROGRESS_FIELD];
-      console.log('[ttlr] progress bar: initial ' + PROGRESS_FIELD + ' raw value from Memberstack:', raw);
+      if (!member) return;
+      const raw = member.customFields?.[PROGRESS_FIELD];
+      console.log('[ttlr] progress bar: remote ' + PROGRESS_FIELD + ' raw value from Memberstack:', raw);
       if (!raw) return;
-      updateProgressDisplay(JSON.parse(raw).episodes);
+      const remote = JSON.parse(raw);
+      const merged = {
+        episodes: mergeCompletionMaps(progressCache.episodes, remote.episodes),
+        series: mergeCompletionMaps(progressCache.series, remote.series),
+      };
+      progressCache = merged;
+      saveLocalProgress(merged);
+      updateProgressDisplay(merged.episodes);
     } catch (err) {
       console.error('[ttlr] Failed to read progress for progress bar', err);
     }
@@ -291,85 +375,139 @@ function initEpisodeRouter(listEl) {
     bookmarkBtn.setAttribute('aria-pressed', String(isBookmarked));
   }
 
-  // In-memory cache of bookmarked ids, populated once on load and kept in sync locally
-  // on every toggle — avoids a Memberstack read on every episode navigation just to
-  // know whether the newly-shown episode is bookmarked.
-  let bookmarksCache = [];
+  const BOOKMARKS_LOCAL_KEY = 'ttlr-bookmarks-local';
 
-  async function loadBookmarks() {
-    const ms = await waitForMemberstack();
-    if (!ms) return [];
+  function loadLocalBookmarks() {
     try {
-      const { data: member } = await ms.getCurrentMember();
-      console.log('[ttlr] loadBookmarks: current member is', member ? member.id : 'NOT LOGGED IN');
-      if (!member) return [];
-      const raw = member.customFields?.[BOOKMARKS_FIELD];
-      console.log('[ttlr] loadBookmarks: raw ' + BOOKMARKS_FIELD + ' value from Memberstack:', raw);
-      if (!raw) return [];
-      try {
-        const parsed = JSON.parse(raw);
-        return Array.isArray(parsed) ? parsed : [];
-      } catch (parseErr) {
-        console.error('[ttlr] Could not parse existing ' + BOOKMARKS_FIELD + ', starting fresh', parseErr);
-        return [];
-      }
+      const parsed = JSON.parse(window.localStorage.getItem(BOOKMARKS_LOCAL_KEY));
+      return Array.isArray(parsed) ? parsed : [];
     } catch (err) {
-      console.error('[ttlr] Failed to read bookmarks from Memberstack', err);
+      console.error('[ttlr] Failed to read local bookmarks cache', err);
       return [];
     }
   }
 
-  if (bookmarkBtn) {
-    loadBookmarks().then((bookmarks) => {
-      console.log('[ttlr] bookmarks: initial load ->', bookmarks);
-      bookmarksCache = bookmarks;
-      setBookmarkVisual(bookmarksCache.includes(idOf(items[currentIndex], currentIndex)));
-    });
+  function saveLocalBookmarks(bookmarks) {
+    try {
+      window.localStorage.setItem(BOOKMARKS_LOCAL_KEY, JSON.stringify(bookmarks));
+    } catch (err) {
+      console.error('[ttlr] Failed to save local bookmarks cache', err);
+    }
+  }
 
-    bookmarkBtn.addEventListener('click', async () => {
-      console.log('[ttlr] bookmark button clicked');
-      if (bookmarkBtn.dataset.pending === 'true') {
-        console.log('[ttlr] bookmark click ignored — a previous click is still in flight');
-        return;
-      }
-      bookmarkBtn.dataset.pending = 'true';
+  // Local-first, same pattern as progress above (and the stacked-apps
+  // launcher): read the cache synchronously so bookmark state is available —
+  // and the icon paints correctly — instantly, before Memberstack loads.
+  let bookmarksCache = loadLocalBookmarks();
+
+  let bookmarksSaveTimer = null;
+  function saveBookmarksToMemberstackDebounced() {
+    window.clearTimeout(bookmarksSaveTimer);
+    bookmarksSaveTimer = window.setTimeout(async () => {
+      const ms = await waitForMemberstack();
+      if (!ms) return;
       try {
-        const ms = await waitForMemberstack();
-        if (!ms) return;
-
-        const episodeId = idOf(items[currentIndex], currentIndex);
         const { data: member } = await ms.getCurrentMember();
-        console.log('[ttlr] bookmark click: current member is', member ? member.id : 'NOT LOGGED IN', '/ episodeId', episodeId);
         if (!member) return; // not logged in — nothing to persist to
 
-        const bookmarks = await loadBookmarks(); // re-read in case another tab changed it
-        const isBookmarked = bookmarks.includes(episodeId);
-        const next = isBookmarked
-          ? bookmarks.filter((id) => id !== episodeId)
-          : [...bookmarks, episodeId];
+        // Merge with the server's current value (union, not overwrite), in
+        // case another tab/device changed it since we last hydrated.
+        let remote = [];
+        const raw = member.customFields?.[BOOKMARKS_FIELD];
+        if (raw) {
+          try {
+            const parsed = JSON.parse(raw);
+            remote = Array.isArray(parsed) ? parsed : [];
+          } catch (parseErr) {
+            console.error('[ttlr] Could not parse existing ' + BOOKMARKS_FIELD + ', overwriting with local', parseErr);
+          }
+        }
+        const merged = Array.from(new Set([...remote, ...bookmarksCache]));
+        bookmarksCache = merged;
+        saveLocalBookmarks(merged);
 
         await ms.updateMember({
-          customFields: { [BOOKMARKS_FIELD]: JSON.stringify(next) },
+          customFields: { [BOOKMARKS_FIELD]: JSON.stringify(merged) },
         });
-        console.log('[ttlr] bookmark click: wrote ' + BOOKMARKS_FIELD + ' to Memberstack ->', next);
-
-        bookmarksCache = next;
-        setBookmarkVisual(!isBookmarked);
+        console.log('[ttlr] bookmarks: synced to Memberstack ->', merged);
       } catch (err) {
         console.error('[ttlr] Failed to save bookmark to Memberstack', err);
-      } finally {
-        bookmarkBtn.dataset.pending = 'false';
       }
+    }, SAVE_DEBOUNCE_MS);
+  }
+
+  if (bookmarkBtn) {
+    // Instant paint from the local cache — no waiting on Memberstack.
+    setBookmarkVisual(bookmarksCache.includes(idOf(items[currentIndex], currentIndex)));
+
+    // Hydrate from Memberstack in the background and merge (union) — picks up
+    // bookmarks recorded on another device/session, without blocking the paint above.
+    waitForMemberstack().then(async (ms) => {
+      if (!ms) return;
+      try {
+        const { data: member } = await ms.getCurrentMember();
+        if (!member) return;
+        const raw = member.customFields?.[BOOKMARKS_FIELD];
+        console.log('[ttlr] bookmarks: remote ' + BOOKMARKS_FIELD + ' raw value from Memberstack:', raw);
+        if (!raw) return;
+        const parsed = JSON.parse(raw);
+        const remote = Array.isArray(parsed) ? parsed : [];
+        const merged = Array.from(new Set([...bookmarksCache, ...remote]));
+        bookmarksCache = merged;
+        saveLocalBookmarks(merged);
+        setBookmarkVisual(merged.includes(idOf(items[currentIndex], currentIndex)));
+      } catch (err) {
+        console.error('[ttlr] Failed to read bookmarks from Memberstack', err);
+      }
+    });
+
+    // Synchronous now — no network wait before the icon updates. The
+    // Memberstack write happens afterward, debounced, in the background.
+    bookmarkBtn.addEventListener('click', () => {
+      console.log('[ttlr] bookmark button clicked');
+      const episodeId = idOf(items[currentIndex], currentIndex);
+      const isBookmarked = bookmarksCache.includes(episodeId);
+      bookmarksCache = isBookmarked
+        ? bookmarksCache.filter((id) => id !== episodeId)
+        : [...bookmarksCache, episodeId];
+
+      saveLocalBookmarks(bookmarksCache);
+      setBookmarkVisual(!isBookmarked);
+      console.log('[ttlr] bookmark click: local state updated instantly ->', bookmarksCache);
+
+      saveBookmarksToMemberstackDebounced();
     });
   }
 
   // ---- Show exactly one item; sync the URL; update button states ----
+  const EPISODE_TRANSITION_MS = 250; // keep in sync with the CSS transition duration on .ttlr_episode_cms_item
+
   function show(index) {
+    const outgoingItem = hasShownOnce ? items[currentIndex] : null;
+    const incomingItem = items[index];
     currentIndex = index;
 
-    items.forEach((item, i) => {
-      item.style.display = i === index ? '' : 'none';
-    });
+    if (!outgoingItem) {
+      // First paint: instant, no transition — nothing to fade from yet.
+      items.forEach((item, i) => {
+        item.style.display = i === index ? '' : 'none';
+      });
+      hasShownOnce = true;
+    } else if (outgoingItem !== incomingItem) {
+      outgoingItem.classList.add('ttlr-episode-fade');
+      window.setTimeout(() => {
+        outgoingItem.style.display = 'none';
+        outgoingItem.classList.remove('ttlr-episode-fade');
+      }, EPISODE_TRANSITION_MS);
+
+      incomingItem.style.display = '';
+      incomingItem.classList.add('ttlr-episode-fade');
+      // Force a reflow so the browser commits the opacity:0 starting state
+      // before removing the class — otherwise add+remove in the same tick
+      // would get coalesced into a no-op with nothing to animate from.
+      void incomingItem.offsetWidth;
+      incomingItem.classList.remove('ttlr-episode-fade');
+    }
 
     const number = numberOf(items[index]);
     if (number) {
