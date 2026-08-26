@@ -1,0 +1,210 @@
+<!--
+  Sky TTLR — Episode router: one visible episode at a time, Prev/Next
+  navigation, completion tracking in Memberstack.
+  Prepared by MakeBuild
+-->
+
+<style>
+  .ttlr_episode_button.is-disabled,
+  .ttlr_episode_button[disabled] {
+    opacity: 0.4;
+    cursor: default;
+    pointer-events: none;
+  }
+</style>
+
+<script>
+  window.Webflow ||= [];
+  window.Webflow.push(function () {
+    document.querySelectorAll('.ttlr_episode_cms_list').forEach(initEpisodeRouter);
+  });
+
+  function initEpisodeRouter(listEl) {
+    const items = Array.from(listEl.querySelectorAll('.ttlr_episode_cms_item'));
+    if (!items.length) return;
+
+    function numberOf(item) {
+      const span = item.querySelector('.ttlr_episode_col_left-number');
+      return span ? span.textContent.trim() : null;
+    }
+
+    const warnedMissingEpisodeId = new Set();
+    function idOf(item, index) {
+      if (item.dataset.episodeId) return item.dataset.episodeId;
+      if (!warnedMissingEpisodeId.has(index)) {
+        warnedMissingEpisodeId.add(index);
+        console.warn(
+          '[ttlr] .ttlr_episode_cms_item is missing data-episode-id — falling back to a ' +
+          'page+number key. Add data-episode-id in Designer (Item ID, or Slug as a fallback) ' +
+          'so completion survives independently of the visible episode number.'
+        );
+      }
+      return `${window.location.pathname}#${numberOf(item) || index}`;
+    }
+
+    // ---- Series ID: required for series-level completion (drives the badge) ----
+    // Every episode on this page belongs to the SAME series — this page IS
+    // that series' own CMS template page — so the series ID only needs to be
+    // read once, from a Custom Attribute on the list wrapper itself or an
+    // ancestor of it, not per-episode. Bind data-series-id to the current
+    // Series item's own Item ID (or Slug) via Designer's Custom Attributes.
+    function resolveSeriesId() {
+      const holder = listEl.closest('[data-series-id]') || listEl;
+      if (holder.dataset.seriesId) return holder.dataset.seriesId;
+      console.warn(
+        '[ttlr] No data-series-id found on or above .ttlr_episode_cms_list — series-level ' +
+        'completion (for the completion badge on the series card) will not be recorded. Add ' +
+        "data-series-id in Designer, bound to this page's own Series Item ID or Slug."
+      );
+      return null;
+    }
+    const seriesId = resolveSeriesId();
+
+    // ---- Memberstack: read/write completion in the ttl-progress Custom Field ----
+    // Same mechanism as the app-launcher's stacked-apps field: a Custom Field
+    // holding a JSON-stringified string, not Member JSON. Self-contained on
+    // purpose — if a shared read/write helper for ttl-progress already exists
+    // site-wide (e.g. from the progress/badges/bookmarks doc), prefer
+    // consolidating into that rather than running two independent read-modify-
+    // write cycles against the same field, which can race and clobber a badge/
+    // bookmark write with a stale episodes object or vice versa.
+    const PROGRESS_FIELD = 'ttl-progress';
+
+    async function markComplete(episodeId) {
+      if (!episodeId || !window.$memberstackDom) return;
+      try {
+        const { data: member } = await window.$memberstackDom.getCurrentMember();
+        if (!member) return; // not logged in — nothing to persist to
+
+        let current = {};
+        const raw = member.customFields?.[PROGRESS_FIELD];
+        if (raw) {
+          try {
+            current = JSON.parse(raw);
+          } catch (parseErr) {
+            console.error('[ttlr] Could not parse existing ' + PROGRESS_FIELD + ', starting fresh', parseErr);
+          }
+        }
+        current.episodes = current.episodes || {};
+
+        if (current.episodes[episodeId]?.completed) return; // already done, no write needed
+
+        current.episodes[episodeId] = {
+          ...(current.episodes[episodeId] || {}),
+          completed: true,
+          completedAt: new Date().toISOString(),
+        };
+
+        // ---- Roll up to series-level completion (this drives the badge) ----
+        // Complete once every episode currently rendered in THIS series' own
+        // list is marked complete. They all belong to the same series (see
+        // resolveSeriesId above), so this is just a check against ids already
+        // on the page — no extra fetch needed.
+        if (seriesId) {
+          current.series = current.series || {};
+          const allComplete = items.every((item, i) => current.episodes[idOf(item, i)]?.completed);
+          if (allComplete && !current.series[seriesId]?.completed) {
+            current.series[seriesId] = {
+              completed: true,
+              completedAt: new Date().toISOString(),
+            };
+          }
+        }
+
+        await window.$memberstackDom.updateMember({
+          customFields: { [PROGRESS_FIELD]: JSON.stringify(current) },
+        });
+      } catch (err) {
+        console.error('[ttlr] Failed to save episode completion to Memberstack', err);
+      }
+    }
+
+    // ---- Show exactly one item; sync the URL; update button states ----
+    function show(index) {
+      items.forEach((item, i) => {
+        item.style.display = i === index ? '' : 'none';
+      });
+
+      const number = numberOf(items[index]);
+      if (number) {
+        const url = new URL(window.location.href);
+        url.searchParams.set('episode', number);
+        history.pushState({ episodeIndex: index }, '', url);
+      }
+
+      updateButtonStates(index);
+    }
+
+    function updateButtonStates(index) {
+      const current = items[index];
+      const prevBtn = current.querySelector('.ttlr_episode_button.is-prev');
+      const nextBtn = current.querySelector('.ttlr_episode_button.is-next');
+
+      if (prevBtn) {
+        const disablePrev = index === 0;
+        prevBtn.disabled = disablePrev;
+        prevBtn.classList.toggle('is-disabled', disablePrev);
+        prevBtn.setAttribute('aria-disabled', String(disablePrev));
+      }
+
+      if (nextBtn) {
+        // Disabled at the last episode until a real "next series" link
+        // exists to wire up instead — see gap #1 at the top of this file.
+        const disableNext = index === items.length - 1;
+        nextBtn.disabled = disableNext;
+        nextBtn.classList.toggle('is-disabled', disableNext);
+        nextBtn.setAttribute('aria-disabled', String(disableNext));
+      }
+
+      // ---- [next-episode-number] / [prev-episode-number]: filled with the ----
+      // adjacent episode's actual visible number, not index±1 (kept
+      // consistent with numberOf() everywhere else, in case numbers are ever
+      // non-contiguous). No Designer binding needed for either — the script
+      // writes the attribute value AND mirrors it into the element's text,
+      // so it works whether you style off the attribute (content:
+      // attr(next-episode-number)) or just read the element's own text.
+      const nextNumberTarget = current.querySelector('[next-episode-number]');
+      if (nextNumberTarget) {
+        const nextItem = items[index + 1];
+        // Last episode: no next item yet (gap #1 above) — left blank rather
+        // than guessing at a number that doesn't exist.
+        const nextNumber = nextItem ? numberOf(nextItem) || '' : '';
+        nextNumberTarget.setAttribute('next-episode-number', nextNumber);
+        nextNumberTarget.textContent = nextNumber;
+      }
+
+      const prevNumberTarget = current.querySelector('[prev-episode-number]');
+      if (prevNumberTarget) {
+        const prevItem = items[index - 1];
+        // First episode: no prev item — left blank, same reasoning as above.
+        const prevNumber = prevItem ? numberOf(prevItem) || '' : '';
+        prevNumberTarget.setAttribute('prev-episode-number', prevNumber);
+        prevNumberTarget.textContent = prevNumber;
+      }
+    }
+
+    // Marks the episode being LEFT as complete, in both directions —
+    // additive only, so navigating back with Prev never un-marks anything.
+    function goTo(targetIndex, fromIndex) {
+      if (targetIndex < 0 || targetIndex >= items.length) return;
+      markComplete(idOf(items[fromIndex], fromIndex));
+      show(targetIndex);
+    }
+
+    items.forEach((item, index) => {
+      const prevBtn = item.querySelector('.ttlr_episode_button.is-prev');
+      const nextBtn = item.querySelector('.ttlr_episode_button.is-next');
+      if (prevBtn) prevBtn.addEventListener('click', () => goTo(index - 1, index));
+      if (nextBtn) nextBtn.addEventListener('click', () => goTo(index + 1, index));
+    });
+
+    // ---- Initial episode from ?episode= in the URL, defaulting to the first ----
+    const requestedNumber = new URL(window.location.href).searchParams.get('episode');
+    let startIndex = 0;
+    if (requestedNumber) {
+      const match = items.findIndex((item) => numberOf(item) === requestedNumber);
+      if (match !== -1) startIndex = match;
+    }
+    show(startIndex);
+  }
+</script>

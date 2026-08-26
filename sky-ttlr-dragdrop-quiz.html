@@ -1,0 +1,336 @@
+<!--
+  Sky TTLR — Drag & Drop matching quiz (interact.js)
+  Prepared by MakeBuild
+-->
+
+<script src="https://cdn.jsdelivr.net/npm/interactjs/dist/interact.min.js"></script>
+
+<style>
+  /* Functional states only — visual design (color, spacing, etc.) is yours */
+
+  .ttlr_dragdrop_prop_item {
+    touch-action: none; /* required by interact.js for reliable touch dragging */
+    cursor: grab;
+    user-select: none;
+  }
+
+  .ttlr_dragdrop_prop_item[aria-disabled="true"] {
+    cursor: default;
+  }
+
+  /* Transform creates its own stacking context, but bump it explicitly so
+     it reliably paints above neighbouring props/zones mid-drag. Relative
+     positioning with no top/left set doesn't move the box at all. */
+  .ttlr_dragdrop_prop_item.is-dragging {
+    position: relative;
+    z-index: 50;
+  }
+
+  .ttlr_dragdrop_prop_item.is-grabbed {
+    outline: 2px solid currentColor;
+    outline-offset: 2px;
+  }
+
+  .ttlr_dragdrop_prop_item.is-correct {
+    outline: 2px solid #2e7d32;
+  }
+
+  .ttlr_dragdrop_drop-zone.drop-hover,
+  .ttlr_dragdrop_props_wrap.drop-hover {
+    outline: 2px dashed currentColor;
+    outline-offset: 2px;
+  }
+
+  /* Brief red flash on the zone that just rejected a wrong prop */
+  .ttlr_dragdrop_drop-zone.is-rejected {
+    animation: ttlr-reject-flash 0.4s ease;
+  }
+
+  @keyframes ttlr-reject-flash {
+    0%, 100% { outline-color: transparent; }
+    30% { outline: 2px solid #c62828; }
+  }
+
+  /* Brief shake on the prop itself when it snaps back */
+  .ttlr_dragdrop_prop_item.is-rejected {
+    animation: ttlr-reject-shake 0.3s ease;
+  }
+
+  @keyframes ttlr-reject-shake {
+    0%, 100% { transform: translateX(0); }
+    25% { transform: translateX(-4px); }
+    75% { transform: translateX(4px); }
+  }
+
+  /* Visually-hidden live region for screen-reader announcements */
+  .ttlr_dragdrop_live {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+  }
+</style>
+
+<script>
+  window.Webflow ||= [];
+  window.Webflow.push(function () {
+    if (typeof interact === 'undefined') return; // interact.js failed to load — fail quietly rather than throw
+    document.querySelectorAll('.ttlr_dragdrop_wrap').forEach(initTtlrDragDrop);
+  });
+
+  function initTtlrDragDrop(root) {
+    const tray = root.querySelector('.ttlr_dragdrop_props_wrap');
+    const props = Array.from(root.querySelectorAll('.ttlr_dragdrop_prop_item[data-correct-zone]'));
+    const resetBtn = root.querySelector('.ttlr_dragdrop_reset');
+    const live = ensureLiveRegion(root);
+
+    if (!tray || !props.length) return;
+
+    let complete = false;
+
+    // ---- Build the zone registry: zoneId -> { wrapperEl, slotEl, label } ----
+    const zones = new Map();
+    root.querySelectorAll('.ttlr_dragdrop_label_item[data-zone-id]').forEach((wrapperEl) => {
+      const slotEl = wrapperEl.querySelector('.ttlr_dragdrop_drop-zone');
+      if (!slotEl) return;
+      const zoneId = wrapperEl.dataset.zoneId;
+
+      // Defensive: ignore/overwrite whatever the slot div's own data-zone-id
+      // says (see note at top of file) — the wrapper is the source of truth.
+      slotEl.removeAttribute('data-zone-id');
+      slotEl.dataset.zoneId = zoneId;
+      slotEl.dataset.dropRole = 'zone';
+      slotEl.setAttribute('tabindex', '0');
+      slotEl.setAttribute('role', 'button');
+      slotEl.setAttribute('aria-roledescription', 'Drop target');
+
+      const labelText = Array.from(wrapperEl.children)
+        .find((child) => child !== slotEl && child.tagName !== 'IMG')
+        ?.textContent.trim() || `Zone ${zoneId}`;
+
+      zones.set(zoneId, { wrapperEl, slotEl, label: labelText });
+    });
+
+    tray.dataset.dropRole = 'tray';
+    tray.setAttribute('tabindex', '0');
+    tray.setAttribute('role', 'button');
+    tray.setAttribute('aria-roledescription', 'Drop target');
+
+    const dropTargets = [tray, ...Array.from(zones.values()).map((z) => z.slotEl)];
+
+    // ---- Helpers ----
+    function labelFor(targetEl) {
+      if (targetEl === tray) return 'the option tray';
+      return zones.get(targetEl.dataset.zoneId)?.label || `Zone ${targetEl.dataset.zoneId}`;
+    }
+
+    function occupantOf(targetEl) {
+      return targetEl === tray ? null : (targetEl.children[0] || null);
+    }
+
+    function resetTransform(el) {
+      el.style.transform = '';
+      el.removeAttribute('data-x');
+      el.removeAttribute('data-y');
+    }
+
+    // The ONLY function that actually moves a prop in the DOM. Called
+    // exactly once per prop, the moment it's correctly placed.
+    function place(propEl, targetEl) {
+      resetTransform(propEl);
+      targetEl.appendChild(propEl);
+    }
+
+    function announce(message) {
+      live.textContent = '';
+      requestAnimationFrame(() => { live.textContent = message; });
+    }
+
+    function flashReject(propEl, zoneEl) {
+      propEl.classList.add('is-rejected');
+      window.setTimeout(() => propEl.classList.remove('is-rejected'), 300);
+      if (zoneEl && zoneEl !== tray) {
+        zoneEl.classList.add('is-rejected');
+        window.setTimeout(() => zoneEl.classList.remove('is-rejected'), 400);
+      }
+    }
+
+    function lockProp(propEl) {
+      propEl.setAttribute('tabindex', '-1');
+      propEl.setAttribute('aria-disabled', 'true');
+      const action = interact(propEl);
+      if (action) action.draggable(false);
+    }
+
+    // A drop is only ever accepted onto its correct, currently-empty zone.
+    // Anything else just resets the transform — since the prop was never
+    // actually moved out of the tray, "rejecting" it means doing nothing.
+    function handleDrop(propEl, targetEl) {
+      if (complete || propEl.classList.contains('is-correct')) return;
+
+      if (targetEl === tray) {
+        resetTransform(propEl); // back onto the tray it never left — settle visually
+        return;
+      }
+
+      const isCorrectZone = targetEl.dataset.zoneId === propEl.dataset.correctZone;
+      const isOccupied = !!occupantOf(targetEl);
+
+      if (!isCorrectZone || isOccupied) {
+        resetTransform(propEl); // reject — snaps back to its exact spot, nothing moved
+        flashReject(propEl, targetEl);
+        announce(`Not quite — try another zone for ${propEl.textContent.trim()}.`);
+        return;
+      }
+
+      place(propEl, targetEl); // correct — the one real DOM move
+      propEl.classList.add('is-correct');
+      lockProp(propEl);
+      announce(`Correct! ${propEl.textContent.trim()} placed in ${labelFor(targetEl)}.`);
+
+      checkComplete();
+    }
+
+    function checkComplete() {
+      if (!props.every((p) => p.classList.contains('is-correct'))) return;
+      complete = true;
+      root.classList.add('is-complete');
+      announce(`Nice work — all ${props.length} matched correctly.`);
+      root.dispatchEvent(new CustomEvent('ttlr:quizCompleted', {
+        bubbles: true,
+        detail: { total: props.length },
+      }));
+    }
+
+    function resetAll() {
+      complete = false;
+      root.classList.remove('is-complete');
+      props.forEach((p) => {
+        const wasPlacedInZone = p.parentElement !== tray;
+        p.classList.remove('is-correct', 'is-rejected', 'is-dragging');
+        p.removeAttribute('aria-disabled');
+        p.setAttribute('tabindex', '0');
+        const action = interact(p);
+        if (action) action.draggable(true);
+        // Only move props that actually left the tray — leave the rest
+        // untouched so resetting doesn't reshuffle props that never moved.
+        if (wasPlacedInZone) place(p, tray);
+        else resetTransform(p);
+      });
+      announce('Quiz reset. All answers returned to the tray.');
+    }
+
+    if (resetBtn) {
+      resetBtn.addEventListener('click', resetAll);
+    }
+
+    // ---- Pointer / touch drag: transform-only, never leaves the DOM ----
+    props.forEach((propEl) => {
+      propEl.setAttribute('tabindex', '0');
+      propEl.setAttribute('role', 'button');
+      propEl.setAttribute('aria-roledescription', 'Draggable answer');
+
+      interact(propEl).draggable({
+        inertia: false,
+        autoScroll: true,
+        listeners: {
+          start(event) {
+            if (complete) return;
+            event.target.classList.add('is-dragging');
+          },
+          move(event) {
+            if (complete) return;
+            const el = event.target;
+            const x = (parseFloat(el.getAttribute('data-x')) || 0) + event.dx;
+            const y = (parseFloat(el.getAttribute('data-y')) || 0) + event.dy;
+            el.style.transform = `translate(${x}px, ${y}px)`;
+            el.setAttribute('data-x', x);
+            el.setAttribute('data-y', y);
+          },
+          end(event) {
+            const el = event.target;
+            el.classList.remove('is-dragging');
+            // Safety net regardless of drop/dragend firing order: if a
+            // correct drop already handled + reset this, it's a no-op.
+            // Otherwise this snaps it back to its resting spot — it was
+            // never actually removed from the tray to begin with.
+            if (!el.classList.contains('is-correct')) resetTransform(el);
+          },
+        },
+      });
+    });
+
+    // ---- Dropzones (4 zone slots + tray) ----
+    dropTargets.forEach((targetEl) => {
+      interact(targetEl).dropzone({
+        accept: '.ttlr_dragdrop_prop_item',
+        overlap: 0.4,
+        ondragenter(event) {
+          event.target.classList.add('drop-hover');
+        },
+        ondragleave(event) {
+          event.target.classList.remove('drop-hover');
+        },
+        ondrop(event) {
+          event.target.classList.remove('drop-hover');
+          handleDrop(event.relatedTarget, event.target);
+        },
+      });
+    });
+
+    // ---- Keyboard alternative: focus a prop, Enter to grab, Tab to a
+    // zone, Enter to attempt a drop, Escape to cancel. Nothing moves in
+    // the DOM here either until handleDrop confirms a correct placement. ----
+    let grabbed = null;
+
+    props.forEach((propEl) => {
+      propEl.addEventListener('keydown', (evt) => {
+        if (complete) return;
+        if (evt.key === 'Enter' || evt.key === ' ') {
+          evt.preventDefault();
+          if (grabbed === propEl) {
+            grabbed.classList.remove('is-grabbed');
+            grabbed = null;
+          } else {
+            if (grabbed) grabbed.classList.remove('is-grabbed');
+            grabbed = propEl;
+            propEl.classList.add('is-grabbed');
+            announce(`${propEl.textContent.trim()} picked up. Tab to a zone and press Enter to try it, or press Escape to cancel.`);
+          }
+        } else if (evt.key === 'Escape' && grabbed === propEl) {
+          evt.preventDefault();
+          grabbed.classList.remove('is-grabbed');
+          announce(`${grabbed.textContent.trim()} placement cancelled.`);
+          grabbed = null;
+        }
+      });
+    });
+
+    dropTargets.forEach((targetEl) => {
+      targetEl.addEventListener('keydown', (evt) => {
+        if (complete || !grabbed) return;
+        if (evt.key === 'Enter' || evt.key === ' ') {
+          evt.preventDefault();
+          const propEl = grabbed;
+          grabbed.classList.remove('is-grabbed');
+          grabbed = null;
+          handleDrop(propEl, targetEl);
+        }
+      });
+    });
+
+    function ensureLiveRegion(el) {
+      let liveEl = el.querySelector('.ttlr_dragdrop_live');
+      if (!liveEl) {
+        liveEl = document.createElement('div');
+        liveEl.className = 'ttlr_dragdrop_live';
+        liveEl.setAttribute('aria-live', 'polite');
+        liveEl.setAttribute('role', 'status');
+        el.appendChild(liveEl);
+      }
+      return liveEl;
+    }
+  }
+</script>
