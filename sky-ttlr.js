@@ -898,11 +898,30 @@ function initNotesPad(root) {
       document.addEventListener('pointerup', onPointerUp);
     });
 
-    try {
-      const savedWidth = window.localStorage.getItem(WIDTH_KEY);
-      if (savedWidth) root.style.width = savedWidth;
-    } catch (err) {
-      console.error('[ttlr] Failed to read notes pad width from localStorage', err);
+    // The pad's own open/close state (is-open="true"/"false", toggled by a
+    // separate script on [open-notes="btn"]) always wins over a remembered
+    // drag width — closed means closed, regardless of what was last dragged.
+    function isOpen() {
+      return root.getAttribute('is-open') === 'true';
     }
+
+    function applySavedWidthIfOpen() {
+      if (!isOpen()) return;
+      try {
+        const savedWidth = window.localStorage.getItem(WIDTH_KEY);
+        if (savedWidth) root.style.width = savedWidth;
+      } catch (err) {
+        console.error('[ttlr] Failed to read notes pad width from localStorage', err);
+      }
+    }
+
+    applySavedWidthIfOpen();
+
+    // Watches is-open regardless of what else changes it (jQuery/GSAP toggle,
+    // dev tools, anything) — the moment it's not "true", clear our own inline
+    // width so nothing we've set can hold the pad open past a close action.
+    new MutationObserver(() => {
+      if (!isOpen()) root.style.width = '';
+    }).observe(root, { attributes: true, attributeFilter: ['is-open'] });
   }
 }
