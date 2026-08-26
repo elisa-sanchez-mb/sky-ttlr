@@ -175,6 +175,13 @@ function initEpisodeRouter(listEl) {
 
     if (progressFill) {
       progressFill.style.clipPath = `inset(0 ${100 - percent}% 0 0)`;
+      // Designer's own inline CSS for .ttlr_progress_fill uses a rainbow
+      // background-image panned via background-position-x, driven by --n
+      // (total steps) and --i (current step) custom properties — this
+      // script doesn't define that visual, just supplies the two variables
+      // it reads: --n = total episodes, --i = completed count.
+      progressFill.style.setProperty('--n', String(total || 1));
+      progressFill.style.setProperty('--i', String(completed));
     }
 
     // Structure is <span>completed</span><span>/</span><span>total</span><span class="...">COMPLETED</span>
@@ -811,15 +818,23 @@ function initNotesPad(root) {
 
   // ---- Copy: copies the note to the clipboard, flashes .notes_copy_success ----
   if (copyBtn) {
-    let successEl = copyBtn.querySelector('.notes_copy_success');
+    // .notes_copy_success lives as a SIBLING of .notes_actions in Designer's
+    // markup (not nested inside the copy button), so this searches the whole
+    // component root rather than just copyBtn's own descendants.
+    let successEl = root.querySelector('.notes_copy_success');
+    console.log('[ttlr] notes: .notes_copy_success found in root?', !!successEl);
     if (!successEl) {
-      // Not present in the Designer markup as of writing — auto-created so copy still
-      // gives feedback out of the box. Add your own .notes_copy_success element (and
-      // restyle/reword this one) in Designer any time; the script only toggles .is-active.
+      // Fallback only if truly absent anywhere in this component — auto-created
+      // so copy still gives feedback out of the box.
       successEl = document.createElement('div');
       successEl.className = 'notes_copy_success';
       successEl.textContent = 'Copied!';
-      copyBtn.appendChild(successEl);
+      root.appendChild(successEl);
+    }
+
+    const successCloseBtn = successEl.querySelector('.notes_copy_close');
+    if (successCloseBtn) {
+      successCloseBtn.addEventListener('click', () => successEl.classList.remove('is-active'));
     }
 
     copyBtn.addEventListener('click', async () => {
