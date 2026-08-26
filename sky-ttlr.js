@@ -344,6 +344,19 @@ function initEpisodeRouter(listEl) {
   const seriesSecondsEl = document.querySelector('[data-series-element="seconds"]');
   console.log('[ttlr] series-end: .ttlr_series-end_success', seriesEndSuccessEl, '/ .ttlr_completed_episode_wrap', completedEpisodeWrapEl, '/ [data-series-element="seconds"]', seriesSecondsEl);
 
+  // Force a clean closed state on load, regardless of whether the static
+  // Designer markup happens to already have .is-active on either element
+  // (e.g. left on from building/previewing it in Designer) — this screen
+  // must only ever appear as a direct result of clicking "Finish Series".
+  if (seriesEndSuccessEl?.classList.contains('is-active')) {
+    console.warn('[ttlr] series-end: .ttlr_series-end_success had .is-active already present on load — removing it. Check the Designer markup isn\'t shipping this class by default.');
+    seriesEndSuccessEl.classList.remove('is-active');
+  }
+  if (completedEpisodeWrapEl?.classList.contains('is-active')) {
+    console.warn('[ttlr] series-end: .ttlr_completed_episode_wrap had .is-active already present on load — removing it. Check the Designer markup isn\'t shipping this class by default.');
+    completedEpisodeWrapEl.classList.remove('is-active');
+  }
+
   // Confetti is an optional third-party dependency (canvas-confetti, see
   // README) — same "load separately, fail quietly if missing" treatment as
   // interact.js, so a page without that script tag doesn't throw here.
