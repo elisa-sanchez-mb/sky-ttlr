@@ -374,14 +374,28 @@ function initEpisodeRouter(listEl) {
   // re-shown) — always clears any previous countdown before starting a new one.
   let seriesEndCountdownInterval = null;
   function startSeriesEndCountdown() {
-    if (!seriesSecondsEl) return;
+    if (!seriesSecondsEl) {
+      console.warn('[ttlr] series-end: [data-series-element="seconds"] not found — countdown cannot run (it will keep showing whatever static text is baked into the Designer markup).');
+      return;
+    }
     window.clearInterval(seriesEndCountdownInterval);
     let secondsLeft = 30;
     seriesSecondsEl.textContent = String(secondsLeft);
+    console.log('[ttlr] series-end: countdown started at ' + secondsLeft + 's');
     seriesEndCountdownInterval = window.setInterval(() => {
       secondsLeft -= 1;
       seriesSecondsEl.textContent = String(Math.max(0, secondsLeft));
-      if (secondsLeft <= 0) window.clearInterval(seriesEndCountdownInterval);
+      if (secondsLeft <= 0) {
+        window.clearInterval(seriesEndCountdownInterval);
+        // Auto-advance: click whichever "next series" button(s) are on the
+        // page. If there's no next series, wireNavButton() (in initSeriesNav)
+        // never attaches a click handler and strips the href on disabled
+        // buttons, so this is a harmless no-op in that case — nothing to
+        // guard here.
+        const nextBtns = document.querySelectorAll('[data-series-nav="next-btn"]');
+        console.log('[ttlr] series-end: countdown reached 0, auto-clicking ' + nextBtns.length + ' [data-series-nav="next-btn"] element(s)');
+        nextBtns.forEach((btn) => btn.click());
+      }
     }, 1000);
   }
 
