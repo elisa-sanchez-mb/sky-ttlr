@@ -14,13 +14,16 @@
   pointer-events: none;
 }
 
-/* Progress bar: .ttlr_progress_fill is a continuous bar; .ttlr_progress_track
-   (containing the CMS-bound .ttlr_progress_segment items) sits on top of it
-   and acts as a mask — each segment is a transparent "window" revealing the
-   fill underneath, while the flex gap between segments stays opaque, which
-   is what reads as the dividing lines between pills. Segment count doesn't
-   need to match the episode count for this to work; it's a purely visual
-   cut over one continuously-animating fill percentage. */
+/* Progress bar: .ttlr_progress_fill sits behind .ttlr_progress_track/segments
+   (both absolutely positioned to overlap the same box) and is masked by JS
+   (sky-ttlr.js, updateProgressMask) to a computed mask-image that matches
+   wherever the .ttlr_progress_segment elements actually render — that's
+   deliberate: it doesn't assume anything about Designer's own layout/CSS
+   for the segments (flex, grid, gaps, whatever), it just measures. The fill
+   percentage itself is applied via clip-path, not width, specifically so
+   .ttlr_progress_fill's own box size never changes — the mask's percentages
+   are relative to that box, so if width also drove the fill %, the two
+   would fight and the mask would misalign every time progress changed. */
 
 .ttlr_episode_progress_inner {
   position: relative;
@@ -29,22 +32,11 @@
 .ttlr_progress_fill {
   position: absolute;
   inset: 0;
-  width: 0%;
+  width: 100%;
+  clip-path: inset(0 100% 0 0); /* 0% complete by default; JS sets this per episode progress */
   background: currentColor; /* placeholder — restyle freely in Designer */
-  transition: width 0.3s ease;
+  transition: clip-path 0.3s ease;
   pointer-events: none;
-}
-
-.ttlr_progress_track {
-  position: relative; /* keeps it painting above the absolutely-positioned fill */
-  display: flex;
-  gap: 4px; /* placeholder — this gap is what shows as the "cut" between segments */
-  background: #fff; /* placeholder — must match whatever sits behind the bar, or the gap lines won't blend in */
-}
-
-.ttlr_progress_segment {
-  flex: 1;
-  background: transparent; /* the "window" that reveals .ttlr_progress_fill underneath */
 }
 
 /* Series-end success screen: hidden until "Finish Series" is clicked on the last episode */
