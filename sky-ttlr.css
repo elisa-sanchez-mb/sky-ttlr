@@ -14,16 +14,17 @@
   pointer-events: none;
 }
 
-/* Progress bar: .ttlr_progress_fill sits behind .ttlr_progress_track/segments
-   (both absolutely positioned to overlap the same box) and is masked by JS
-   (sky-ttlr.js, updateProgressMask) to a computed mask-image that matches
-   wherever the .ttlr_progress_segment elements actually render — that's
-   deliberate: it doesn't assume anything about Designer's own layout/CSS
-   for the segments (flex, grid, gaps, whatever), it just measures. The fill
-   percentage itself is applied via clip-path, not width, specifically so
-   .ttlr_progress_fill's own box size never changes — the mask's percentages
-   are relative to that box, so if width also drove the fill %, the two
-   would fight and the mask would misalign every time progress changed. */
+/* Progress bar: .ttlr_progress_fill's own background (gradient, colors, etc.)
+   is entirely Designer's — this file never sets `background` on it, on
+   purpose, since the `background` shorthand resets background-image to
+   `none` and would silently wipe out Designer's gradient if this rule ever
+   won the cascade. All this does is control HOW MUCH of that gradient is
+   visible (clip-path, driven by episode completion %) and WHERE it's cut
+   into pill segments (mask-image, computed in JS from each
+   .ttlr_progress_segment's actual rendered position — see updateProgressMask
+   in sky-ttlr.js). Segment count doesn't need to match episode count for
+   that to work; it's a purely visual cut over one continuous, unmodified
+   gradient. */
 
 .ttlr_episode_progress_inner {
   position: relative;
@@ -34,7 +35,6 @@
   inset: 0;
   width: 100%;
   clip-path: inset(0 100% 0 0); /* 0% complete by default; JS sets this per episode progress */
-  background: currentColor; /* placeholder — restyle freely in Designer */
   transition: clip-path 0.3s ease;
   pointer-events: none;
 }
