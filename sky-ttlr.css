@@ -65,13 +65,16 @@
   50% { filter: brightness(1.25); }
 }
 
-/* Empty-state color for segments not yet reached by the fill. Safe to set
-   directly (no overlap risk): .ttlr_progress_fill is a positioned element
-   (position: absolute above), so by normal CSS stacking rules it always
-   paints above these non-positioned segments regardless of DOM order —
-   wherever the fill's clip-path/mask actually reveal paint, it fully
-   covers this color; everywhere else, this shows through untouched. */
-.ttlr_progress_segment {
+/* Empty-state color for segments not yet reached by the fill. Applied to
+   both the segment itself and Designer's nested .ttlr_progress_segment_bg
+   (whichever exists in your markup gets it; harmless if both do). Safe to
+   set directly (no overlap risk): .ttlr_progress_fill is a positioned
+   element (position: absolute above), so by normal CSS stacking rules it
+   always paints above these non-positioned segments regardless of DOM
+   order — wherever the fill's clip-path/mask actually reveal paint, it
+   fully covers this color; everywhere else, this shows through untouched. */
+.ttlr_progress_segment,
+.ttlr_progress_segment_bg {
   background-color: #D9D9D9;
 }
 
