@@ -85,13 +85,17 @@
 }
 
 /* Same trigger as .ttlr_series-end_success above — shown together when
-   "Finish Series" is clicked on the last episode. */
+   "Finish Series" is clicked on the last episode. !important on both rules:
+   Designer styling on this class (set directly in the Designer canvas) can
+   carry higher effective specificity than a plain class selector here, and
+   has actually won before on a different element (the progress bar
+   gradient) — this makes hidden/shown non-negotiable regardless. */
 .ttlr_completed_episode_wrap {
-  display: none;
+  display: none !important;
 }
 
 .ttlr_completed_episode_wrap.is-active {
-  display: block;
+  display: block !important;
 }
 
 /* ---- Drag & drop quiz ---- */
