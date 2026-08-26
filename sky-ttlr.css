@@ -14,6 +14,48 @@
   pointer-events: none;
 }
 
+/* Progress bar: .ttlr_progress_fill is a continuous bar; .ttlr_progress_track
+   (containing the CMS-bound .ttlr_progress_segment items) sits on top of it
+   and acts as a mask — each segment is a transparent "window" revealing the
+   fill underneath, while the flex gap between segments stays opaque, which
+   is what reads as the dividing lines between pills. Segment count doesn't
+   need to match the episode count for this to work; it's a purely visual
+   cut over one continuously-animating fill percentage. */
+
+.ttlr_episode_progress_inner {
+  position: relative;
+}
+
+.ttlr_progress_fill {
+  position: absolute;
+  inset: 0;
+  width: 0%;
+  background: currentColor; /* placeholder — restyle freely in Designer */
+  transition: width 0.3s ease;
+  pointer-events: none;
+}
+
+.ttlr_progress_track {
+  position: relative; /* keeps it painting above the absolutely-positioned fill */
+  display: flex;
+  gap: 4px; /* placeholder — this gap is what shows as the "cut" between segments */
+  background: #fff; /* placeholder — must match whatever sits behind the bar, or the gap lines won't blend in */
+}
+
+.ttlr_progress_segment {
+  flex: 1;
+  background: transparent; /* the "window" that reveals .ttlr_progress_fill underneath */
+}
+
+/* Series-end success screen: hidden until "Finish Series" is clicked on the last episode */
+.ttlr_series-end_success {
+  display: none;
+}
+
+.ttlr_series-end_success.is-active {
+  display: block;
+}
+
 /* ---- Drag & drop quiz ---- */
 
 .ttlr_dragdrop_prop_item {

@@ -111,9 +111,58 @@ function initEpisodeRouter(listEl) {
       await window.$memberstackDom.updateMember({
         customFields: { [PROGRESS_FIELD]: JSON.stringify(current) },
       });
+
+      updateProgressDisplay(current.episodes);
     } catch (err) {
       console.error('[ttlr] Failed to save episode completion to Memberstack', err);
     }
+  }
+
+  // ---- Progress bar: global (one per page, not per-episode) completed/total
+  // display for this series. The CMS-bound .ttlr_progress_segment items are a
+  // purely visual mask over .ttlr_progress_fill (see sky-ttlr.css) — they don't
+  // need to match the episode count, so this only ever needs a fill percentage.
+  const progressFill = document.querySelector('.ttlr_progress_fill');
+  const progressP = document.querySelector('.ttlr_episode_progress_p');
+
+  function updateProgressDisplay(episodesProgress) {
+    const total = items.length;
+    const completed = items.filter((item, i) => episodesProgress?.[idOf(item, i)]?.completed).length;
+
+    if (progressFill) {
+      progressFill.style.width = `${total ? (completed / total) * 100 : 0}%`;
+    }
+
+    // Structure is <span>completed</span><span>/</span><span>total</span><span class="...">COMPLETED</span>
+    // — no distinguishing attribute on the count spans, so this relies on position.
+    if (progressP) {
+      const counts = progressP.children;
+      if (counts[0]) counts[0].textContent = String(completed);
+      if (counts[2]) counts[2].textContent = String(total);
+    }
+  }
+
+  if (window.$memberstackDom) {
+    window.$memberstackDom.getCurrentMember()
+      .then(({ data: member }) => {
+        const raw = member?.customFields?.[PROGRESS_FIELD];
+        if (!raw) return;
+        try {
+          updateProgressDisplay(JSON.parse(raw).episodes);
+        } catch (parseErr) {
+          console.error('[ttlr] Could not parse existing ' + PROGRESS_FIELD + ' for progress bar', parseErr);
+        }
+      })
+      .catch((err) => {
+        console.error('[ttlr] Failed to read progress for progress bar', err);
+      });
+  }
+
+  // ---- Series-end success screen: shown when "Finish Series" is clicked on
+  // the last episode (see updateButtonStates / the click-wiring loop below).
+  const seriesEndSuccessEl = document.querySelector('.ttlr_series-end_success');
+  function showSeriesEndSuccess() {
+    if (seriesEndSuccessEl) seriesEndSuccessEl.classList.add('is-active');
   }
 
   // ---- Bookmarks: one global button (not per-episode) that bookmarks whichever
@@ -229,12 +278,16 @@ function initEpisodeRouter(listEl) {
     }
 
     if (nextBtn) {
-      // Disabled at the last episode until a real "next series" link
-      // exists to wire up instead — see gap #1 at the top of this file.
-      const disableNext = index === items.length - 1;
-      nextBtn.disabled = disableNext;
-      nextBtn.classList.toggle('is-disabled', disableNext);
-      nextBtn.setAttribute('aria-disabled', String(disableNext));
+      // Always actionable now: on every episode but the last it advances
+      // (see the click-wiring loop below); on the last one it's relabeled
+      // "Finish Series" and marks that episode complete + shows the
+      // .ttlr_series-end_success screen instead of advancing anywhere.
+      nextBtn.disabled = false;
+      nextBtn.classList.remove('is-disabled');
+      nextBtn.setAttribute('aria-disabled', 'false');
+      if (index === items.length - 1) {
+        nextBtn.textContent = 'Finish Series';
+      }
     }
 
     // ---- [next-episode-number] / [prev-episode-number]: filled with the ----
@@ -247,8 +300,9 @@ function initEpisodeRouter(listEl) {
     const nextNumberTarget = current.querySelector('[next-episode-number]');
     if (nextNumberTarget) {
       const nextItem = items[index + 1];
-      // Last episode: no next item yet (gap #1 above) — left blank rather
-      // than guessing at a number that doesn't exist.
+      // Last episode: no next item — left blank rather than guessing at a
+      // number that doesn't exist (the Next button itself becomes "Finish
+      // Series" here instead, see above).
       const nextNumber = nextItem ? numberOf(nextItem) || '' : '';
       nextNumberTarget.setAttribute('next-episode-number', nextNumber);
       nextNumberTarget.textContent = nextNumber;
@@ -276,7 +330,20 @@ function initEpisodeRouter(listEl) {
     const prevBtn = item.querySelector('.ttlr_episode_button.is-prev');
     const nextBtn = item.querySelector('.ttlr_episode_button.is-next');
     if (prevBtn) prevBtn.addEventListener('click', () => goTo(index - 1, index));
-    if (nextBtn) nextBtn.addEventListener('click', () => goTo(index + 1, index));
+    if (nextBtn) {
+      const isLast = index === items.length - 1;
+      nextBtn.addEventListener('click', () => {
+        if (isLast) {
+          // goTo's own bounds check would silently no-op here (targetIndex
+          // out of range) without ever calling markComplete — that was the
+          // actual cause of the last episode never getting marked complete.
+          markComplete(idOf(item, index));
+          showSeriesEndSuccess();
+        } else {
+          goTo(index + 1, index);
+        }
+      });
+    }
   });
 
   // ---- Initial episode from ?episode= in the URL, defaulting to the first ----
