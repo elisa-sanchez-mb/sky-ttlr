@@ -8,9 +8,9 @@ Each file is self-contained and documented inline (top comment block) with exact
 
 All components below live in `sky-ttlr.js`/`sky-ttlr.css`, each under its own clearly-commented section — nothing here is a separate file anymore (see Install).
 
-**Episode router** turns a CMS list of episodes into a single-episode viewer. All episodes in a Series render into the page as normal (that's how Webflow's CMS binding works), but the script hides every item except one and toggles `.ttlr_episode_button.is-prev` / `.is-next` to step through them — no page navigation, no reload. The current episode number is mirrored into a `?episode=` query param via `history.pushState`, so a link straight to `?episode=3` opens on that episode. Leaving an episode (via Prev or Next) writes that episode's completion to Memberstack; once every episode in the series is marked complete, it also writes series-level completion, which is what a completion badge elsewhere on the site would read. On the *last* episode, Next relabels itself "Finish Series" — clicking it marks that final episode complete (the only point this was previously falling through uncompleted) and reveals `.ttlr_series-end_success`, instead of advancing anywhere.
+**Episode router** turns a CMS list of episodes into a single-episode viewer. All episodes in a Series render into the page as normal (that's how Webflow's CMS binding works), but the script hides every item except one and toggles `.ttlr_episode_button.is-prev` / `.is-next` to step through them — no page navigation, no reload. The current episode number is mirrored into a `?episode=` query param via `history.pushState`, so a link straight to `?episode=3` opens on that episode. Clicking Next writes the episode you're leaving as complete to Memberstack (clicking Prev never does — going back to re-watch doesn't count as finishing it); once every episode in the series is marked complete, it also writes series-level completion, which is what a completion badge elsewhere on the site would read. On the *last* episode, Next relabels itself "Finish Series" — clicking it marks that final episode complete (the only point this was previously falling through uncompleted) and reveals `.ttlr_series-end_success`, instead of advancing anywhere.
 
-**Progress bar** is a single global (not per-episode) fill + "X / Y COMPLETED" readout for the whole series, driven by the same Memberstack completion data as the episode router. `.ttlr_progress_fill` grows to `completed / total` width; the CMS-bound `.ttlr_progress_segment` items sit on top and act as a mask over it (each segment is a transparent window onto the fill, the gaps between them stay opaque) — segment count is purely visual and doesn't need to match the episode count for that to work.
+**Progress bar** is a single global (not per-episode) fill + "X / Y COMPLETED" readout for the whole series, driven by the same Memberstack completion data as the episode router. `completed / total` is applied to `.ttlr_progress_fill` as a `clip-path` (revealing more of Designer's own gradient, left to right — the gradient's `background` itself is never touched by the script); the pill-segment look is a `mask-image` computed in JS from each `.ttlr_progress_segment`'s actual rendered position, so segment count doesn't need to match episode count and Designer's own layout for the segments (flex, grid, gaps, whatever) doesn't need to match any assumption in the CSS. Segments have a `#D9D9D9` empty-state background in `sky-ttlr.css`, safe to set directly since the fill is a positioned element that always paints above them regardless of DOM order.
 
 **Drag & drop quiz** is a matching quiz built on interact.js: each "prop" is draggable, and it only actually leaves the tray and gets placed in the DOM when it's dropped on its correct, still-empty zone (`data-correct-zone` on the prop must match `data-zone-id` on the zone) — every other drop just snaps back to the tray with a reject flash, so there's no fail state and unlimited retries. A correctly-placed prop scales to fill its zone's box (CSS, keyed off `.is-correct` once the prop is a real child of the zone). It also ships a full keyboard path (Tab to a prop, Enter to grab it, Tab to a zone, Enter to attempt the drop, Escape to cancel) and an `aria-live` region that announces placements and rejections, so it doesn't depend on drag gestures to be usable. Once every prop is correctly placed it fires a `ttlr:quizCompleted` custom event that other code can listen for.
 
@@ -45,13 +45,13 @@ Add to Webflow Site Settings → Custom Code → **Head**:
 
 ```html
 <script src="https://cdn.jsdelivr.net/npm/interactjs/dist/interact.min.js"></script>
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/elisa-sanchez-mb/sky-ttlr@v1.3.5/sky-ttlr.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/elisa-sanchez-mb/sky-ttlr@v1.3.6/sky-ttlr.css">
 ```
 
 Add to Webflow Site Settings → Custom Code → **before `</body>`** (after `webflow.js` and after Memberstack's own script tag):
 
 ```html
-<script src="https://cdn.jsdelivr.net/gh/elisa-sanchez-mb/sky-ttlr@v1.3.5/sky-ttlr.js"></script>
+<script src="https://cdn.jsdelivr.net/gh/elisa-sanchez-mb/sky-ttlr@v1.3.6/sky-ttlr.js"></script>
 ```
 
 `interact.js` is a third-party dependency of the drag-drop quiz and is loaded from its own CDN rather than bundled into `sky-ttlr.js`, so it keeps its own versioning/caching. It's optional at runtime — if it fails to load, the drag-drop quiz no-ops rather than throwing, and the episode router is unaffected.
