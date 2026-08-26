@@ -14,12 +14,14 @@
   pointer-events: none;
 }
 
-/* Crossfade between episodes (see show() in sky-ttlr.js) — .ttlr-episode-fade
-   is added to trigger a fade to 0, on both the outgoing item (fading out)
-   and briefly on the incoming one (to fade it in from 0), so both animate
-   concurrently. Duration must stay in sync with EPISODE_TRANSITION_MS there. */
+/* Sequential fade between episodes (see show() in sky-ttlr.js) —
+   .ttlr-episode-fade is added to fade the outgoing item to 0, then (after
+   it's fully hidden) added-then-removed on the incoming item to fade it in
+   from 0. Sequential, not simultaneous, since having both items visible in
+   normal document flow at once would visibly jump the page layout. Duration
+   must stay in sync with EPISODE_TRANSITION_MS there. */
 .ttlr_episode_cms_item {
-  transition: opacity 0.25s ease;
+  transition: opacity 0.15s ease;
 }
 
 .ttlr_episode_cms_item.ttlr-episode-fade {
