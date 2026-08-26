@@ -18,6 +18,8 @@ function initEpisodeRouter(listEl) {
   const items = Array.from(listEl.querySelectorAll('.ttlr_episode_cms_item'));
   if (!items.length) return;
 
+  let currentIndex = 0;
+
   function numberOf(item) {
     const span = item.querySelector('.ttlr_episode_col_left-number');
     return span ? span.textContent.trim() : null;
@@ -114,8 +116,91 @@ function initEpisodeRouter(listEl) {
     }
   }
 
+  // ---- Bookmarks: one global button (not per-episode) that bookmarks whichever
+  // episode is currently displayed. Read/write in the ttl-bookmarks Custom Field —
+  // kept separate from ttl-progress above so a bookmark toggle and a completion
+  // write never contend over the same field's read-modify-write cycle.
+  const BOOKMARKS_FIELD = 'ttl-bookmarks';
+  const bookmarkBtn = document.querySelector('[bookmark="btn"]');
+
+  // The provided icon is a single path drawn with two subpaths + evenodd fill, which
+  // renders as a hollow/outline ribbon (the second subpath is the outer boundary, the
+  // first carves out the inner hole). Dropping the first subpath leaves just the outer
+  // boundary as an ordinary filled shape — the "bookmarked" solid version of the icon.
+  const BOOKMARK_OUTLINE_D = 'M6.10982 14.7059C6.48066 14.3969 7.01934 14.3969 7.39018 14.7059L12 18.5474V1.5H1.5V18.5474L6.10982 14.7059ZM6.75 16.125L12.2699 20.7249C12.7584 21.132 13.5 20.7846 13.5 20.1487V0.75C13.5 0.335786 13.1642 0 12.75 0H0.75C0.335786 0 0 0.335787 0 0.750001V20.1487C0 20.7846 0.741645 21.132 1.23014 20.7249L6.75 16.125Z';
+  const BOOKMARK_SOLID_D = 'M6.75 16.125L12.2699 20.7249C12.7584 21.132 13.5 20.7846 13.5 20.1487V0.75C13.5 0.335786 13.1642 0 12.75 0H0.75C0.335786 0 0 0.335787 0 0.750001V20.1487C0 20.7846 0.741645 21.132 1.23014 20.7249L6.75 16.125Z';
+
+  function setBookmarkVisual(isBookmarked) {
+    if (!bookmarkBtn) return;
+    const path = bookmarkBtn.querySelector('svg path');
+    if (path) path.setAttribute('d', isBookmarked ? BOOKMARK_SOLID_D : BOOKMARK_OUTLINE_D);
+    bookmarkBtn.classList.toggle('is-bookmarked', isBookmarked);
+    bookmarkBtn.setAttribute('aria-pressed', String(isBookmarked));
+  }
+
+  // In-memory cache of bookmarked ids, populated once on load and kept in sync locally
+  // on every toggle — avoids a Memberstack read on every episode navigation just to
+  // know whether the newly-shown episode is bookmarked.
+  let bookmarksCache = [];
+
+  async function loadBookmarks() {
+    if (!window.$memberstackDom) return [];
+    try {
+      const { data: member } = await window.$memberstackDom.getCurrentMember();
+      if (!member) return [];
+      const raw = member.customFields?.[BOOKMARKS_FIELD];
+      if (!raw) return [];
+      try {
+        const parsed = JSON.parse(raw);
+        return Array.isArray(parsed) ? parsed : [];
+      } catch (parseErr) {
+        console.error('[ttlr] Could not parse existing ' + BOOKMARKS_FIELD + ', starting fresh', parseErr);
+        return [];
+      }
+    } catch (err) {
+      console.error('[ttlr] Failed to read bookmarks from Memberstack', err);
+      return [];
+    }
+  }
+
+  if (bookmarkBtn) {
+    loadBookmarks().then((bookmarks) => {
+      bookmarksCache = bookmarks;
+      setBookmarkVisual(bookmarksCache.includes(idOf(items[currentIndex], currentIndex)));
+    });
+
+    bookmarkBtn.addEventListener('click', async () => {
+      if (!window.$memberstackDom || bookmarkBtn.dataset.pending === 'true') return;
+      bookmarkBtn.dataset.pending = 'true';
+      try {
+        const episodeId = idOf(items[currentIndex], currentIndex);
+        const { data: member } = await window.$memberstackDom.getCurrentMember();
+        if (!member) return; // not logged in — nothing to persist to
+
+        const bookmarks = await loadBookmarks(); // re-read in case another tab changed it
+        const isBookmarked = bookmarks.includes(episodeId);
+        const next = isBookmarked
+          ? bookmarks.filter((id) => id !== episodeId)
+          : [...bookmarks, episodeId];
+
+        await window.$memberstackDom.updateMember({
+          customFields: { [BOOKMARKS_FIELD]: JSON.stringify(next) },
+        });
+
+        bookmarksCache = next;
+        setBookmarkVisual(!isBookmarked);
+      } catch (err) {
+        console.error('[ttlr] Failed to save bookmark to Memberstack', err);
+      } finally {
+        bookmarkBtn.dataset.pending = 'false';
+      }
+    });
+  }
+
   // ---- Show exactly one item; sync the URL; update button states ----
   function show(index) {
+    currentIndex = index;
+
     items.forEach((item, i) => {
       item.style.display = i === index ? '' : 'none';
     });
@@ -128,6 +213,7 @@ function initEpisodeRouter(listEl) {
     }
 
     updateButtonStates(index);
+    setBookmarkVisual(bookmarksCache.includes(idOf(items[index], index)));
   }
 
   function updateButtonStates(index) {
