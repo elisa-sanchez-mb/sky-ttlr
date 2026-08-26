@@ -50,13 +50,13 @@ Add to Webflow Site Settings → Custom Code → **Head**:
 ```html
 <script src="https://cdn.jsdelivr.net/npm/interactjs/dist/interact.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1/dist/confetti.browser.min.js"></script>
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/elisa-sanchez-mb/sky-ttlr@v1.5.1/sky-ttlr.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/elisa-sanchez-mb/sky-ttlr@v1.5.2/sky-ttlr.css">
 ```
 
 Add to Webflow Site Settings → Custom Code → **before `</body>`** (after `webflow.js` and after Memberstack's own script tag):
 
 ```html
-<script src="https://cdn.jsdelivr.net/gh/elisa-sanchez-mb/sky-ttlr@v1.5.1/sky-ttlr.js"></script>
+<script src="https://cdn.jsdelivr.net/gh/elisa-sanchez-mb/sky-ttlr@v1.5.2/sky-ttlr.js"></script>
 ```
 
 `interact.js` and `canvas-confetti` are third-party dependencies (drag-drop quiz and the series-end celebration, respectively) loaded from their own CDNs rather than bundled into `sky-ttlr.js`, so each keeps its own versioning/caching. Both are optional at runtime — if either fails to load, that one feature no-ops rather than throwing (drag-drop quiz, or just no confetti on "Finish Series"), and everything else is unaffected.
