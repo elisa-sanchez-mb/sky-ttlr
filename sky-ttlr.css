@@ -77,6 +77,16 @@
   outline: 2px solid #2e7d32;
 }
 
+/* Once placed correctly, the prop is a real DOM child of its drop zone
+   (see place() in sky-ttlr.js) — scale it to fill that zone's box rather
+   than keeping its tray size. Only applies once actually inside a zone,
+   so props still in the tray (or reset back to it) are unaffected. */
+.ttlr_dragdrop_drop-zone .ttlr_dragdrop_prop_item.is-correct {
+  width: 100%;
+  height: 100%;
+  transition: width 0.2s ease, height 0.2s ease;
+}
+
 .ttlr_dragdrop_drop-zone.drop-hover,
 .ttlr_dragdrop_props_wrap.drop-hover {
   outline: 2px dashed currentColor;
