@@ -186,6 +186,15 @@
   touch-action: none; /* required for reliable pointer dragging on touch, same as the quiz props */
 }
 
+/* CSS-level backstop matching MIN_WIDTH in sky-ttlr.js — the JS already
+   clamps the dragged width, but this guarantees the floor even if something
+   else (flex-shrink on a parent, etc.) would otherwise compress the pad
+   below its own inline width. Scoped to is-open="true" specifically so it
+   never fights the closed (width: 0) state. */
+.notes_component_wrap[is-open="true"] {
+  min-width: 280px;
+}
+
 /* Suppresses text selection site-wide while actively dragging the resize handle */
 html.ttlr-is-resizing,
 html.ttlr-is-resizing * {
