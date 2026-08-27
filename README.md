@@ -69,13 +69,13 @@ Add to Webflow Site Settings → Custom Code → **Head**:
 <script src="https://cdn.jsdelivr.net/npm/interactjs/dist/interact.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1/dist/confetti.browser.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/swiper@11/swiper-bundle.min.js"></script>
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/elisa-sanchez-mb/sky-ttlr@v1.6.9/sky-ttlr.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/elisa-sanchez-mb/sky-ttlr@v1.7.0/sky-ttlr.css">
 ```
 
 Add to Webflow Site Settings → Custom Code → **before `</body>`** (after `webflow.js` and after Memberstack's own script tag):
 
 ```html
-<script src="https://cdn.jsdelivr.net/gh/elisa-sanchez-mb/sky-ttlr@v1.6.9/sky-ttlr.js"></script>
+<script src="https://cdn.jsdelivr.net/gh/elisa-sanchez-mb/sky-ttlr@v1.7.0/sky-ttlr.js"></script>
 ```
 
 `interact.js`, `canvas-confetti`, and `swiper` are third-party dependencies (drag-drop quiz, the series-end celebration, and the series carousel, respectively) loaded from their own CDNs rather than bundled into `sky-ttlr.js`, so each keeps its own versioning/caching. `interact.js` and `swiper` are optional at runtime — if either fails to load, that one feature no-ops rather than throwing, and everything else is unaffected. `canvas-confetti` is **self-loading**: the Head `<script>` tag above is a nice-to-have (avoids a load delay the first time "Finish Series" is clicked), not a requirement — if it's missing, the script injects it itself on demand, the same self-sufficient pattern the site's own stacked-apps launcher uses for Memberstack. Deliberately **not** loading Swiper's own CSS file — see the Series swiper description above for why.
@@ -93,7 +93,7 @@ These Custom Attributes have to exist on the live markup for the scripts above t
 - **`data-zone-id`** (static, one per zone: `"1"`–`"4"`) and **`data-correct-zone`** (CMS-bound, per prop) — both already present and correctly assigned by the drag-drop script itself at runtime; nothing to add here.
 - **`.ttlr_dragdrop_drop-zone` needs a real height** in Designer — currently an empty div with no set size, which is very likely why zone drops aren't registering.
 - **`[bookmark="btn"]`** — a single button placed once on the page (not inside each `.ttlr_episode_cms_item`), containing the bookmark ribbon SVG with an `<svg><path>` inside it. The script reads/writes that `<path>`'s `d` attribute directly to switch between outline and filled, so the SVG markup needs to be the actual `<svg>`/`<path>` element, not a background-image or other substitute.
-- **`[data-bookmark-field="title"]` / `"month"` / `"img"`** — inside each `.ttlr_episode_cms_item`, whatever elements hold that episode's title/description, a short label (series name/month/category), and its thumbnail (`<img>`) respectively. Read once, at the moment the bookmark button is clicked, to snapshot into `ttl-bookmarks` — see Bookmarks above. Any one missing just leaves that field blank in the snapshot rather than breaking the others.
+- **`[data-bookmark-thumbnail]`** inside each `.ttlr_episode_cms_item` — a wrapper containing an `<img>` (the thumbnail) and one element carrying `data-bookmark-number`/`data-bookmark-name`/`data-bookmark-series` as **attribute values** (not that element's own text content, which is separate/unused). `data-bookmark-name`'s value is what gets snapshotted as the bookmark's title (falls back to the episode's own `<h2>` if missing). **`data-bookmark-month`** on `<body>` — page-level (every episode on a series page shares the same month), snapshotted as the bookmark's month label. Read once, at the moment the bookmark button is clicked, into `ttl-bookmarks` — see Bookmarks above. Any one missing just leaves that field blank in the snapshot rather than breaking the others.
 - **`.ttlr_cms_month-list` containing exactly one `.ttlr_cms_month-item`** (an `<a>`, with `data-bookmark="thumbnail-wrap"` on its image wrap, `data-bookmark="month"` and `data-bookmark="episode"` on its text fields, and `data-bookmark="btn"` on a remove/bookmark icon inside it) — the template the Bookmarked episodes carousel clones once per bookmark. That single template item is never itself shown; the script removes it and appends one clone per bookmark on every render.
 - **`.notes_copy_success`** — searched for anywhere inside the notes component root (it's a *sibling* of `.notes_actions` in the current Designer markup, not nested inside the copy button), with its own `.notes_copy_close` close button wired up automatically if present. Falls back to an auto-created placeholder only if the element is missing entirely.
 - **`.ttlr_series-end_success`** — a single element placed once on the page (like the bookmark button and progress bar), hidden by default. The script only adds `.is-active` to reveal it when "Finish Series" is clicked; content/layout is Designer's.
