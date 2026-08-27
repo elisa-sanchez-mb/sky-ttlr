@@ -1255,8 +1255,8 @@ function initSeriesSwiper(root) {
   // that width needs to be set explicitly in Designer for this to size
   // correctly (unlike a fixed slidesPerView number, which doesn't need it).
   new Swiper(root, {
-    slidesPerView: 'auto',
-    spaceBetween: 0,
+    slidesPerView: 3,
+    spaceBetween: 20,
     navigation: {
       nextEl,
       prevEl,
