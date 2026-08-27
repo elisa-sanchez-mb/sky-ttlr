@@ -192,20 +192,25 @@ function initEpisodeRouter(listEl) {
       completedAt: new Date().toISOString(),
     };
 
-    // ---- Roll up to series-level completion (this drives the badge) ----
-    // Complete once every episode currently rendered in THIS series' own
-    // list is marked complete. They all belong to the same series (see
-    // resolveSeriesId above), so this is just a check against ids already
-    // on the page — no extra fetch needed.
+    // ---- Roll up to series-level completion (this drives the home page
+    // card badge — see initSeriesCard). completedCount/total are written on
+    // EVERY call, not just once the series is fully done, so the home page
+    // can show a running "3/5" — not just a boolean. They all belong to the
+    // same series (see resolveSeriesId above), so this is just a check
+    // against ids already on the page — no extra fetch needed.
     if (seriesId) {
       progressCache.series = progressCache.series || {};
-      const allComplete = items.every((item, i) => progressCache.episodes[idOf(item, i)]?.completed);
-      if (allComplete && !progressCache.series[seriesId]?.completed) {
-        progressCache.series[seriesId] = {
-          completed: true,
-          completedAt: new Date().toISOString(),
-        };
-      }
+      const completedCount = items.filter((item, i) => progressCache.episodes[idOf(item, i)]?.completed).length;
+      const total = items.length;
+      const wasComplete = progressCache.series[seriesId]?.completed;
+      const isComplete = completedCount === total;
+      progressCache.series[seriesId] = {
+        ...(progressCache.series[seriesId] || {}),
+        completedCount,
+        total,
+        completed: isComplete,
+        completedAt: isComplete ? (wasComplete ? progressCache.series[seriesId]?.completedAt : new Date().toISOString()) : undefined,
+      };
     }
 
     saveLocalProgress(progressCache);
@@ -223,7 +228,10 @@ function initEpisodeRouter(listEl) {
   // the mask would misalign every time the percentage changed.
   const progressFill = document.querySelector('.ttlr_progress_fill');
   const progressP = document.querySelector('.ttlr_episode_progress_p');
-  console.log('[ttlr] progress bar: .ttlr_progress_fill', progressFill, '/ .ttlr_episode_progress_p', progressP);
+  // The bar's own immediate wrapper (holds the fill + segments) — hidden
+  // alongside the count text on series completion, see showSeriesEndSuccess.
+  const progressBarEl = document.querySelector('.ttlr_episode_progress_inner');
+  console.log('[ttlr] progress bar: .ttlr_progress_fill', progressFill, '/ .ttlr_episode_progress_p', progressP, '/ .ttlr_episode_progress_inner', progressBarEl);
 
   let lastProgressPercent = null; // null = no comparison basis yet, so the first paint never "pulses"
 
@@ -421,6 +429,8 @@ function initEpisodeRouter(listEl) {
 
   function showSeriesEndSuccess(episodeItem) {
     if (episodeItem) episodeItem.style.display = 'none'; // only the success screen should show, not the episode underneath it
+    if (progressBarEl) progressBarEl.style.display = 'none'; // the episode progress bar shouldn't show once the series is done either
+    if (progressP) progressP.style.display = 'none';
     if (seriesEndSuccessEl) seriesEndSuccessEl.classList.add('is-active');
     if (completedEpisodeWrapEl) completedEpisodeWrapEl.classList.add('is-active');
     fireConfetti();
@@ -1183,9 +1193,12 @@ function initSeriesNav(sourceEl) {
   if (!itemEls.length) return;
 
   const items = itemEls
-    .map((itemEl) => {
+    .map((itemEl, i) => {
       const link = itemEl.tagName === 'A' ? itemEl : itemEl.querySelector('a[href]');
-      if (!link) return null;
+      if (!link) {
+        console.warn('[ttlr] series nav: item ' + i + ' in [data-series-nav="source"] has no <a href> (itself or a descendant) — skipping it. Its markup:', itemEl.outerHTML);
+        return null;
+      }
       // number/name are read from dedicated [data-series-nav-field="..."]
       // elements inside the item, since a single link's combined text can't
       // be split back into separate pieces — text/img stay as whole-link
@@ -1291,5 +1304,71 @@ function initSeriesSwiper(root) {
       nextEl,
       prevEl,
     },
+  });
+}
+
+/* ---- Series cards: per-series completion badge on the home page carousel
+   cards ("3/5" or "COMPLETED"), rolled up from the SAME ttl-progress Custom
+   Field the episode router writes .series[seriesId].completedCount/total/
+   completed into on every markComplete() call (see initEpisodeRouter above)
+   — nothing series-specific is computed here, this just reads that rollup.
+   Local-first like everything else: paints from localStorage instantly,
+   then re-renders once Memberstack hydrates in the background. ---- */
+
+window.Webflow ||= [];
+window.Webflow.push(function () {
+  const cards = document.querySelectorAll('.ttlr_series_card-wrap[data-series-id]');
+  console.log('[ttlr] series card: found ' + cards.length + ' .ttlr_series_card-wrap[data-series-id] element(s)');
+  cards.forEach(initSeriesCard);
+});
+
+function initSeriesCard(cardEl) {
+  const PROGRESS_FIELD = 'ttl-progress';
+  const PROGRESS_LOCAL_KEY = 'ttlr-progress-local';
+
+  const seriesId = cardEl.dataset.seriesId;
+  const statusEl = cardEl.querySelector('[data-series-card="status"]');
+  // Optional: if present, its width is set to the completion % as a mini
+  // fill bar — same "only control how much shows, never touch styling"
+  // approach as the main episode progress bar (see updateProgressDisplay).
+  const fillEl = cardEl.querySelector('.ttlr_series_card-inner');
+  console.log('[ttlr] initSeriesCard: seriesId', seriesId, '/ [data-series-card="status"]', statusEl, '/ .ttlr_series_card-inner', fillEl);
+  if (!statusEl) {
+    console.warn('[ttlr] initSeriesCard: no [data-series-card="status"] element inside this card — nothing to write the "3/5"/"COMPLETED" text into. Add one in Designer inside .ttlr_series_card-content.');
+  }
+
+  function render(seriesProgress) {
+    const entry = seriesProgress?.[seriesId];
+    // No recorded progress for this series yet (or it predates
+    // completedCount/total being tracked) — leave whatever static/default
+    // text Designer put in [data-series-card="status"] alone rather than
+    // showing a misleading "0/undefined".
+    if (!entry || !entry.total) return;
+
+    if (statusEl) statusEl.textContent = entry.completed ? 'COMPLETED' : `${entry.completedCount}/${entry.total}`;
+    cardEl.classList.toggle('is-completed', !!entry.completed);
+    if (fillEl) fillEl.style.width = `${Math.min(100, (entry.completedCount / entry.total) * 100)}%`;
+  }
+
+  let local = {};
+  try {
+    local = JSON.parse(window.localStorage.getItem(PROGRESS_LOCAL_KEY)) || {};
+  } catch (err) {
+    console.error('[ttlr] initSeriesCard: failed to read local progress cache', err);
+  }
+  render(local.series);
+
+  waitForMemberstack().then(async (ms) => {
+    if (!ms) return;
+    try {
+      const { data: member } = await ms.getCurrentMember();
+      if (!member) return;
+      const raw = member.customFields?.[PROGRESS_FIELD];
+      if (!raw) return;
+      const remote = JSON.parse(raw);
+      render(remote.series);
+    } catch (err) {
+      console.error('[ttlr] initSeriesCard: failed to read remote progress', err);
+    }
   });
 }
