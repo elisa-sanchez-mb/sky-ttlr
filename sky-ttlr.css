@@ -230,6 +230,18 @@ html.ttlr-is-resizing * {
   pointer-events: none;
 }
 
+/* ---- Series cards (home page) ---- */
+
+/* Structural backstop for the mini completion fill bar — .ttlr_series_card-inner's
+   width is set by JS (see initSeriesCard in sky-ttlr.js); this just makes sure
+   whatever width it's given actually clips to the bar's box instead of
+   overflowing it. Color/background is entirely Designer's, same reasoning as
+   the main episode progress bar. */
+.ttlr_series_card-progress {
+  position: relative;
+  overflow: hidden;
+}
+
 /* ---- Series swiper ---- */
 
 /* The only structural CSS Swiper's JS doesn't apply itself at runtime
