@@ -1410,3 +1410,26 @@ function initSeriesCard(badgeEl) {
     }
   });
 }
+
+/* ---- Series count label: #series-number shows how many series are in the
+   CMS-bound list — content data (how many Series items exist here), not
+   member progress, so this is independent of ttl-progress/localStorage and
+   just counts whatever's actually rendered in .ttlr_cms_series-wrapper.
+   Independent of Swiper too (doesn't require it to have loaded/initialized). ---- */
+
+window.Webflow ||= [];
+window.Webflow.push(function () {
+  const labelEl = document.querySelector('#series-number');
+  const listEl = document.querySelector('.ttlr_cms_series-wrapper');
+  console.log('[ttlr] series count label: #series-number', labelEl, '/ .ttlr_cms_series-wrapper', listEl);
+  if (!labelEl || !listEl) return;
+
+  const count = listEl.querySelectorAll('.ttlr_cms_series-item').length;
+  if (!count) {
+    labelEl.style.display = 'none';
+    return;
+  }
+  const textEl = labelEl.querySelector('div') || labelEl;
+  textEl.textContent = `${count} Series`;
+  console.log('[ttlr] series count label: found ' + count + ' .ttlr_cms_series-item — wrote "' + textEl.textContent + '"');
+});
