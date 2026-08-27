@@ -16,6 +16,8 @@ All components below live in `sky-ttlr.js`/`sky-ttlr.css`, each under its own cl
 
 **Series cards** (home page carousel) show each series' own completion — "3/5" or "Completed" — rolled up from the same `ttl-progress` data the episode router writes. Every `markComplete()` call on a series' own episode page now also records `completedCount`/`total` (not just a `completed` boolean once it hits 100%) against that series' id, so a home page card can read `${completedCount}/${total}` directly without any extra fetch or per-series episode list of its own — just the same Custom Field, read local-first then re-rendered once Memberstack hydrates. The badge (`.ttlr_completion_tag-wrap` / `.ttlr_badge`) is hidden entirely for a series with no recorded progress yet, rather than showing Designer's static placeholder text or a misleading "0/5". `.ttlr_series_card-inner` (if present) is sized to that same percentage as a mini fill bar, same "only control how much shows, `background` stays entirely Designer's" approach as the main progress bar.
 
+**Series count label** (`#series-number`) shows how many series are in the CMS-bound carousel list — content data (how many Series items exist), not member progress, so it's independent of `ttl-progress`/localStorage and Swiper — it just counts `.ttlr_cms_series-item` elements actually rendered inside `.ttlr_cms_series-wrapper` and writes `"N Series"` into the label's inner text.
+
 **Series swiper** is a Swiper.js carousel for the landing/hero page's CMS-bound series list (`.ttlr_cms_series-wrapper`), wired to Designer's own `.swiper-button-prev`/`.swiper-button-next` elements. Swiper's own bundled CSS is deliberately **not** loaded — it would apply its own positioning and default arrow-glyph styling to those nav buttons, overriding Designer's custom SVG icons and layout — so only the minimal structural CSS Swiper's JS doesn't already handle itself at runtime (`position: relative; overflow: hidden` on the container) lives in `sky-ttlr.css`. Uses a fixed `slidesPerView: 3, spaceBetween: 20` (edited directly on GitHub after the initial `slidesPerView: 'auto'` delivery) — with a fixed number, Swiper computes each slide's width itself, so `.ttlr_cms_series-item` no longer needs an explicit Designer-set width for slides to size correctly.
 
 **Bookmarks** is a single global button (`[bookmark="btn"]`, not one per episode) that bookmarks whichever episode is currently displayed by the episode router. Clicking it toggles that episode's id and swaps the button's SVG icon between an outline and a solid-filled version of the same path — instantly, since this is local-first like the progress bar (see below). Icon state stays in sync as you page through episodes (each one shows its own bookmarked/not state immediately) and is restored correctly on page load. The background sync to Memberstack writes the current local bookmark list **as-is**, not merged with whatever's already on the server — bookmarks, unlike progress, aren't monotonic (removal is a real, valid action), and merging with a stale remote value used to silently resurrect anything just unbookmarked.
@@ -55,13 +57,13 @@ Add to Webflow Site Settings → Custom Code → **Head**:
 <script src="https://cdn.jsdelivr.net/npm/interactjs/dist/interact.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1/dist/confetti.browser.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/swiper@11/swiper-bundle.min.js"></script>
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/elisa-sanchez-mb/sky-ttlr@v1.6.5/sky-ttlr.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/elisa-sanchez-mb/sky-ttlr@v1.6.6/sky-ttlr.css">
 ```
 
 Add to Webflow Site Settings → Custom Code → **before `</body>`** (after `webflow.js` and after Memberstack's own script tag):
 
 ```html
-<script src="https://cdn.jsdelivr.net/gh/elisa-sanchez-mb/sky-ttlr@v1.6.5/sky-ttlr.js"></script>
+<script src="https://cdn.jsdelivr.net/gh/elisa-sanchez-mb/sky-ttlr@v1.6.6/sky-ttlr.js"></script>
 ```
 
 `interact.js`, `canvas-confetti`, and `swiper` are third-party dependencies (drag-drop quiz, the series-end celebration, and the series carousel, respectively) loaded from their own CDNs rather than bundled into `sky-ttlr.js`, so each keeps its own versioning/caching. `interact.js` and `swiper` are optional at runtime — if either fails to load, that one feature no-ops rather than throwing, and everything else is unaffected. `canvas-confetti` is **self-loading**: the Head `<script>` tag above is a nice-to-have (avoids a load delay the first time "Finish Series" is clicked), not a requirement — if it's missing, the script injects it itself on demand, the same self-sufficient pattern the site's own stacked-apps launcher uses for Memberstack. Deliberately **not** loading Swiper's own CSS file — see the Series swiper description above for why.
