@@ -242,6 +242,15 @@ html.ttlr-is-resizing * {
   overflow: hidden;
 }
 
+/* The fill itself — .ttlr_series_card-inner had no background at all before
+   this, so JS setting its `width` (see initSeriesCard in sky-ttlr.js) had
+   nothing visible to reveal. Explicit height too, since JS only ever
+   controls width. */
+.ttlr_series_card-inner {
+  height: 100%;
+  background-image: linear-gradient(90deg, #FF8C00 5.03%, #F80032 25.04%, #FF00A0 45.04%, #8C28FF 65.06%, #0023FF 82.04%, #19A0FF 96.05%), linear-gradient(90deg, #FF6400 11.81%, #FF0A50 50.11%, #FF00A5 88.92%);
+}
+
 /* ---- Series swiper ---- */
 
 /* The only structural CSS Swiper's JS doesn't apply itself at runtime
