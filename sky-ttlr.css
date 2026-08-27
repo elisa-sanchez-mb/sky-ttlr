@@ -137,6 +137,8 @@
 .ttlr_dragdrop_drop-zone .ttlr_dragdrop_prop_item.is-correct {
   width: 100%;
   height: 100%;
+  display: flex;
+  justify-content: center;
   transition: width 0.2s ease, height 0.2s ease;
 }
 
@@ -217,4 +219,17 @@ html.ttlr-is-resizing * {
   opacity: 0.4;
   cursor: default;
   pointer-events: none;
+}
+
+/* ---- Series swiper ---- */
+
+/* The only structural CSS Swiper's JS doesn't apply itself at runtime
+   (slide sizing/transform/flex all come from Swiper via inline styles
+   regardless of whether its own stylesheet is loaded — see sky-ttlr.js for
+   why that stylesheet is deliberately skipped). Without this, slides
+   wouldn't be clipped to the container and could visibly overflow before
+   Swiper's JS finishes initializing. */
+.ttlr_cms_series-wrapper.swiper {
+  position: relative;
+  overflow: hidden;
 }
