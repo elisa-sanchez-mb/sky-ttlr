@@ -238,7 +238,6 @@ html.ttlr-is-resizing * {
    overflowing it. Color/background is entirely Designer's, same reasoning as
    the main episode progress bar. */
 .ttlr_series_card-progress {
-  position: relative;
   overflow: hidden;
 }
 
