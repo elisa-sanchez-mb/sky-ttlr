@@ -1414,7 +1414,7 @@ function initSeriesCard(badgeEl) {
       return;
     }
     wrapEl.style.display = '';
-    textEl.textContent = entry.completed ? 'Completed' : `${entry.completedCount}/${entry.total}`;
+    textEl.textContent = entry.completed ? 'Completed' : `${entry.completedCount}/${entry.total} Completed`;
     cardEl?.classList.toggle('is-completed', !!entry.completed);
     if (fillEl && entry.total) fillEl.style.width = `${Math.min(100, (entry.completedCount / entry.total) * 100)}%`;
   }
