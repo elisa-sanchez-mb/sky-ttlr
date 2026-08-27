@@ -1234,6 +1234,18 @@ function initSeriesNav(sourceEl) {
   const prevItem = currentIndex !== -1 ? items[currentIndex - 1] || null : null;
 
   function wireNavButton(direction, item) {
+    // Optional: an outer wrapper around the whole next/prev block (label,
+    // thumbnail, button — everything), fully hidden when there's genuinely
+    // no next/prev series (e.g. the last series in the list has no "next").
+    // Without this, the button/text/img fields above still exist but are
+    // blank/disabled, which can look broken (empty image, an inert-looking
+    // but still-visible button) rather than the block just not being there.
+    // Opt-in — if this attribute isn't added in Designer, behavior is
+    // unchanged from before.
+    document.querySelectorAll(`[data-series-nav="${direction}-wrap"]`).forEach((el) => {
+      el.style.display = item ? '' : 'none';
+    });
+
     document.querySelectorAll(`[data-series-nav="${direction}-btn"]`).forEach((btn) => {
       if (!item) {
         btn.classList.add('is-disabled');
@@ -1323,37 +1335,43 @@ function initSeriesSwiper(root) {
 
 window.Webflow ||= [];
 window.Webflow.push(function () {
-  const cards = document.querySelectorAll('.ttlr_series_card-wrap[data-series-id]');
-  console.log('[ttlr] series card: found ' + cards.length + ' .ttlr_series_card-wrap[data-series-id] element(s)');
-  cards.forEach(initSeriesCard);
+  // data-series-id lives on .ttlr_badge (inside .ttlr_completion_tag-wrap),
+  // NOT on .ttlr_series_card-wrap itself — confirmed via a live HTML dump
+  // 2026-08-27 (an earlier version of this assumed the wrong element and
+  // never matched anything on the live page).
+  const badges = document.querySelectorAll('.ttlr_badge[data-series-id]');
+  console.log('[ttlr] series card: found ' + badges.length + ' .ttlr_badge[data-series-id] element(s)');
+  badges.forEach(initSeriesCard);
 });
 
-function initSeriesCard(cardEl) {
+function initSeriesCard(badgeEl) {
   const PROGRESS_FIELD = 'ttl-progress';
   const PROGRESS_LOCAL_KEY = 'ttlr-progress-local';
 
-  const seriesId = cardEl.dataset.seriesId;
-  const statusEl = cardEl.querySelector('[data-series-card="status"]');
-  // Optional: if present, its width is set to the completion % as a mini
-  // fill bar — same "only control how much shows, never touch styling"
-  // approach as the main episode progress bar (see updateProgressDisplay).
-  const fillEl = cardEl.querySelector('.ttlr_series_card-inner');
-  console.log('[ttlr] initSeriesCard: seriesId', seriesId, '/ [data-series-card="status"]', statusEl, '/ .ttlr_series_card-inner', fillEl);
-  if (!statusEl) {
-    console.warn('[ttlr] initSeriesCard: no [data-series-card="status"] element inside this card — nothing to write the "3/5"/"COMPLETED" text into. Add one in Designer inside .ttlr_series_card-content.');
-  }
+  const seriesId = badgeEl.dataset.seriesId;
+  // .ttlr_completion_tag-wrap is what actually gets hidden entirely for a
+  // not-yet-started series — .ttlr_badge is just the pill inside it.
+  const wrapEl = badgeEl.closest('.ttlr_completion_tag-wrap') || badgeEl;
+  const textEl = badgeEl.querySelector('div') || badgeEl;
+  // Optional mini fill bar on the card thumbnail — a sibling of this badge
+  // inside the same .ttlr_series_card-wrap, not a descendant of it.
+  const cardEl = badgeEl.closest('.ttlr_series_card-wrap');
+  const fillEl = cardEl?.querySelector('.ttlr_series_card-inner');
+  console.log('[ttlr] initSeriesCard: seriesId', seriesId, '/ wrap', wrapEl, '/ text el', textEl, '/ fill el', fillEl);
 
   function render(seriesProgress) {
     const entry = seriesProgress?.[seriesId];
-    // No recorded progress for this series yet (or it predates
-    // completedCount/total being tracked) — leave whatever static/default
-    // text Designer put in [data-series-card="status"] alone rather than
-    // showing a misleading "0/undefined".
-    if (!entry || !entry.total) return;
-
-    if (statusEl) statusEl.textContent = entry.completed ? 'COMPLETED' : `${entry.completedCount}/${entry.total}`;
-    cardEl.classList.toggle('is-completed', !!entry.completed);
-    if (fillEl) fillEl.style.width = `${Math.min(100, (entry.completedCount / entry.total) * 100)}%`;
+    // Not started yet (no entry at all, or zero episodes completed) — hide
+    // the badge entirely rather than showing Designer's static "Completed"
+    // placeholder or a misleading "0/5".
+    if (!entry || !entry.completedCount) {
+      wrapEl.style.display = 'none';
+      return;
+    }
+    wrapEl.style.display = '';
+    textEl.textContent = entry.completed ? 'Completed' : `${entry.completedCount}/${entry.total}`;
+    cardEl?.classList.toggle('is-completed', !!entry.completed);
+    if (fillEl && entry.total) fillEl.style.width = `${Math.min(100, (entry.completedCount / entry.total) * 100)}%`;
   }
 
   let local = {};
