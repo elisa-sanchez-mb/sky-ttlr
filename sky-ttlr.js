@@ -514,10 +514,12 @@ function initEpisodeRouter(listEl) {
   const BOOKMARKS_LOCAL_KEY = 'ttlr-bookmarks-local';
 
   // Bookmarks are stored as SNAPSHOT objects, not bare id strings — captured
-  // at the moment of bookmarking from [data-bookmark-field="title"/"month"/
-  // "img"] on the current episode item (see bookmarkDataFor below), so the
-  // bookmarked-episodes carousel elsewhere on the site (see the "bookmarks
-  // list" section near the end of this file) can render real content
+  // at the moment of bookmarking from [data-bookmark-thumbnail] (per episode
+  // item: an <img> + a [data-bookmark-number]/data-bookmark-name element)
+  // and data-bookmark-month on <body> (page-level — every episode on a
+  // series page shares the same month) — see bookmarkDataFor below. This is
+  // what the bookmarked-episodes carousel elsewhere on the site (see the
+  // "bookmarks list" section near the end of this file) renders from,
   // without needing a live lookup against a full episode list. Completion
   // state is deliberately NOT snapshotted — that's read live from
   // ttl-progress at render time instead, so it can't go stale.
@@ -548,16 +550,20 @@ function initEpisodeRouter(listEl) {
   }
 
   function bookmarkDataFor(item, index) {
-    const titleEl = item.querySelector('[data-bookmark-field="title"]');
-    const monthEl = item.querySelector('[data-bookmark-field="month"]');
-    const imgEl = item.querySelector('[data-bookmark-field="img"]');
+    const thumbWrap = item.querySelector('[data-bookmark-thumbnail]');
+    const imgEl = thumbWrap?.querySelector('img');
+    // data-bookmark-number/data-bookmark-name/data-bookmark-series all live
+    // as ATTRIBUTES on this one element — its own text content is separate
+    // (unused) placeholder text, not what to read.
+    const fieldsEl = thumbWrap?.querySelector('[data-bookmark-number]');
+    const titleH2 = item.querySelector('h2');
     const number = numberOf(item);
     const url = new URL(window.location.href);
     if (number) url.searchParams.set('episode', number);
     return {
       id: idOf(item, index),
-      title: titleEl ? titleEl.textContent.trim() : '',
-      month: monthEl ? monthEl.textContent.trim() : '',
+      title: fieldsEl?.getAttribute('data-bookmark-name') || (titleH2 ? titleH2.textContent.trim() : ''),
+      month: document.body.getAttribute('data-bookmark-month') || '',
       imgSrc: imgEl ? imgEl.src : '',
       href: url.toString(),
     };
@@ -1280,10 +1286,20 @@ function initSeriesNav(sourceEl) {
       // elements inside the item, since a single link's combined text can't
       // be split back into separate pieces — text/img stay as whole-link
       // fallbacks for anyone who doesn't need them split out.
+      //
+      // The live markup has TWO elements both tagged data-series-nav-
+      // field="number" per item — a static "Series" label alongside the
+      // actual value ("2") — confirmed via a live HTML dump 2026-08-27.
+      // querySelector() would always grab whichever comes first (the
+      // "Series" label, never the number), which is why "Up Next" showed
+      // the literal word "Series" instead of a number. Pick whichever
+      // match is purely numeric instead of just the first one.
+      const numberEls = Array.from(itemEl.querySelectorAll('[data-series-nav-field="number"]'));
+      const numberMatch = numberEls.map((el) => el.textContent.trim()).find((t) => /^\d+$/.test(t));
       return {
         href: link.href,
         text: link.textContent.trim(),
-        number: itemEl.querySelector('[data-series-nav-field="number"]')?.textContent.trim() || '',
+        number: numberMatch || '',
         name: itemEl.querySelector('[data-series-nav-field="name"]')?.textContent.trim() || '',
         imgSrc: itemEl.querySelector('[data-series-nav-field="img"]')?.src
           || link.querySelector('img')?.src
