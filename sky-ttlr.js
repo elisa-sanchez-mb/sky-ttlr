@@ -147,7 +147,15 @@ function initEpisodeRouter(listEl) {
       if (!ms) return;
       try {
         const { data: member } = await ms.getCurrentMember();
-        if (!member) return; // not logged in — nothing to persist to
+        if (!member) {
+          // Silent before — this is the #1 suspect for "local storage
+          // updates fine, Memberstack never does": local-first means
+          // saveLocalProgress() above already ran regardless of login
+          // state, but there's genuinely nothing to write to Memberstack
+          // if nobody's logged in as a member on this page.
+          console.warn('[ttlr] progress: getCurrentMember() returned no member (not logged in?) — skipping the Memberstack write, only localStorage was updated.');
+          return;
+        }
 
         // Merge with whatever's on the server right now (not a blind
         // overwrite), in case another tab/device wrote since we last hydrated.
@@ -167,10 +175,16 @@ function initEpisodeRouter(listEl) {
         progressCache = merged;
         saveLocalProgress(merged);
 
-        await ms.updateMember({
+        const { data: updatedMember } = await ms.updateMember({
           customFields: { [PROGRESS_FIELD]: JSON.stringify(merged) },
         });
-        console.log('[ttlr] progress: synced to Memberstack ->', merged);
+        console.log('[ttlr] progress: synced to Memberstack ->', merged, '/ updateMember response customFields:', updatedMember?.customFields);
+        if (!updatedMember?.customFields?.[PROGRESS_FIELD]) {
+          // Same symptom previously confirmed for ttl-bookmarks: Memberstack
+          // silently drops a customFields write whose key doesn't exactly
+          // match the field's actual Key (as opposed to its dashboard Label).
+          console.warn('[ttlr] progress: updateMember response did NOT include "' + PROGRESS_FIELD + '" — the write was likely silently rejected by Memberstack. Check Settings → Custom Fields → the progress field\'s exact Key matches PROGRESS_FIELD = "' + PROGRESS_FIELD + '" (not just its Label).');
+        }
         updateProgressDisplay(merged.episodes);
       } catch (err) {
         console.error('[ttlr] Failed to save episode completion to Memberstack', err);
