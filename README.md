@@ -12,7 +12,9 @@ All components below live in `sky-ttlr.js`/`sky-ttlr.css`, each under its own cl
 
 **Progress bar** is a single global (not per-episode) fill + "X / Y COMPLETED" readout for the whole series, driven by the same completion data as the episode router (so it's local-first too — paints from `localStorage` instantly, no waiting on Memberstack). `completed / total` is applied to `.ttlr_progress_fill` as a `clip-path` (revealing more of Designer's own gradient, left to right — the gradient's `background` itself is never touched by the script), with a slightly-eased transition and a brief brightness pulse (`.is-updated`, `filter` only — still never touches `background`) on a genuine increase. The pill-segment look is a `mask-image` computed in JS from each `.ttlr_progress_segment`'s actual rendered position, so segment count doesn't need to match episode count and Designer's own layout for the segments (flex, grid, gaps, whatever) doesn't need to match any assumption in the CSS. Segments have a `#D9D9D9` empty-state background in `sky-ttlr.css`, safe to set directly since the fill is a positioned element that always paints above them regardless of DOM order.
 
-**Drag & drop quiz** is a matching quiz built on interact.js: each "prop" is draggable, and it only actually leaves the tray and gets placed in the DOM when it's dropped on its correct, still-empty zone (`data-correct-zone` on the prop must match `data-zone-id` on the zone) — every other drop just snaps back to the tray with a reject flash, so there's no fail state and unlimited retries. A correctly-placed prop scales to fill its zone's box (CSS, keyed off `.is-correct` once the prop is a real child of the zone). It also ships a full keyboard path (Tab to a prop, Enter to grab it, Tab to a zone, Enter to attempt the drop, Escape to cancel) and an `aria-live` region that announces placements and rejections, so it doesn't depend on drag gestures to be usable. Once every prop is correctly placed it fires a `ttlr:quizCompleted` custom event that other code can listen for.
+**Drag & drop quiz** is a matching quiz built on interact.js: each "prop" is draggable, and it only actually leaves the tray and gets placed in the DOM when it's dropped on its correct, still-empty zone (`data-correct-zone` on the prop must match `data-zone-id` on the zone) — every other drop just snaps back to the tray with a reject flash, so there's no fail state and unlimited retries. A correctly-placed prop scales to fill its zone's box and centers itself in it (CSS, keyed off `.is-correct` once the prop is a real child of the zone). It also ships a full keyboard path (Tab to a prop, Enter to grab it, Tab to a zone, Enter to attempt the drop, Escape to cancel) and an `aria-live` region that announces placements and rejections, so it doesn't depend on drag gestures to be usable. Once every prop is correctly placed it fires a `ttlr:quizCompleted` custom event that other code can listen for.
+
+**Series swiper** is a Swiper.js carousel for the landing/hero page's CMS-bound series list (`.ttlr_cms_series-wrapper`), wired to Designer's own `.swiper-button-prev`/`.swiper-button-next` elements. Swiper's own bundled CSS is deliberately **not** loaded — it would apply its own positioning and default arrow-glyph styling to those nav buttons, overriding Designer's custom SVG icons and layout — so only the minimal structural CSS Swiper's JS doesn't already handle itself at runtime (`position: relative; overflow: hidden` on the container) lives in `sky-ttlr.css`. Uses `slidesPerView: 'auto'`, so each `.ttlr_cms_series-item` needs an explicit width set in Designer for slides to size correctly.
 
 **Bookmarks** is a single global button (`[bookmark="btn"]`, not one per episode) that bookmarks whichever episode is currently displayed by the episode router. Clicking it toggles that episode's id and swaps the button's SVG icon between an outline and a solid-filled version of the same path — instantly, since this is local-first like the progress bar (see below). Icon state stays in sync as you page through episodes (each one shows its own bookmarked/not state immediately) and is restored correctly on page load.
 
@@ -29,7 +31,7 @@ Both bookmarks and progress follow the same pattern as the site's existing app-l
 | `sky-ttlr.js` | Delivered — old inline Custom Code blocks on the live site need removing first, see warning above |
 | `sky-ttlr.css` | Delivered |
 
-All custom behavior lives in these two files now (episode router, progress bar, drag-drop quiz, bookmarks, and notes pad today; swiper and glass-effect will fold in here once added). Webflow references them directly instead of pasting file contents into Custom Code.
+All custom behavior lives in these two files now (episode router, progress bar, drag-drop quiz, bookmarks, notes pad, series navigation, and series swiper today; glass-effect will fold in here once added). Webflow references them directly instead of pasting file contents into Custom Code.
 
 ## ⚠ Remove the old inline Custom Code blocks
 
@@ -50,16 +52,17 @@ Add to Webflow Site Settings → Custom Code → **Head**:
 ```html
 <script src="https://cdn.jsdelivr.net/npm/interactjs/dist/interact.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1/dist/confetti.browser.min.js"></script>
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/elisa-sanchez-mb/sky-ttlr@v1.5.5/sky-ttlr.css">
+<script src="https://cdn.jsdelivr.net/npm/swiper@11/swiper-bundle.min.js"></script>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/elisa-sanchez-mb/sky-ttlr@v1.6.0/sky-ttlr.css">
 ```
 
 Add to Webflow Site Settings → Custom Code → **before `</body>`** (after `webflow.js` and after Memberstack's own script tag):
 
 ```html
-<script src="https://cdn.jsdelivr.net/gh/elisa-sanchez-mb/sky-ttlr@v1.5.5/sky-ttlr.js"></script>
+<script src="https://cdn.jsdelivr.net/gh/elisa-sanchez-mb/sky-ttlr@v1.6.0/sky-ttlr.js"></script>
 ```
 
-`interact.js` and `canvas-confetti` are third-party dependencies (drag-drop quiz and the series-end celebration, respectively) loaded from their own CDNs rather than bundled into `sky-ttlr.js`, so each keeps its own versioning/caching. Both are optional at runtime — if either fails to load, that one feature no-ops rather than throwing (drag-drop quiz, or just no confetti on "Finish Series"), and everything else is unaffected.
+`interact.js`, `canvas-confetti`, and `swiper` are third-party dependencies (drag-drop quiz, the series-end celebration, and the series carousel, respectively) loaded from their own CDNs rather than bundled into `sky-ttlr.js`, so each keeps its own versioning/caching. All three are optional at runtime — if any fails to load, that one feature no-ops rather than throwing (drag-drop quiz, no confetti on "Finish Series", or no series carousel), and everything else is unaffected. Deliberately **not** loading Swiper's own CSS file — see the Series swiper description above for why.
 
 **To ship an update:** push to `main`, tag the commit (`git tag vX.Y.Z && git push --tags`), then update the `@vX.Y.Z` in both Webflow URLs to match.
 
@@ -77,8 +80,9 @@ These Custom Attributes have to exist on the live markup for the scripts above t
 - **`.notes_copy_success`** — searched for anywhere inside the notes component root (it's a *sibling* of `.notes_actions` in the current Designer markup, not nested inside the copy button), with its own `.notes_copy_close` close button wired up automatically if present. Falls back to an auto-created placeholder only if the element is missing entirely.
 - **`.ttlr_series-end_success`** — a single element placed once on the page (like the bookmark button and progress bar), hidden by default. The script only adds `.is-active` to reveal it when "Finish Series" is clicked; content/layout is Designer's.
 - **`.ttlr_completed_episode_wrap`** — same trigger/pattern as `.ttlr_series-end_success` above (hidden by default, `.is-active` added at the same moment) — a separate element in case the two need different placement/content.
-- **`[data-series-element="seconds"]`** — a single element whose text content the script overwrites every second with a count from 30 down to 0, starting the moment "Finish Series" is clicked. Purely a countdown display; nothing happens automatically at 0.
+- **`[data-series-element="seconds"]`** — a single element whose text content the script overwrites every second with a count from 30 down to 0, starting the moment "Finish Series" is clicked. At 0, every `[data-series-nav="next-btn"]` on the page gets auto-clicked (see Series navigation, given directly in chat).
 - **`.ttlr_progress_fill`'s `background` (gradient, etc.) is entirely Designer's** — the script never sets `background` on it (an earlier version tried panning it with `--n`/`--i` custom properties; removed, since the intended look is one continuous gradient revealed proportionally via `clip-path`, not a panned/per-segment color). Keep whatever `background-image` is already declared for it in Designer as-is.
+- **`.ttlr_cms_series-item` needs an explicit width** in Designer — the series swiper uses `slidesPerView: 'auto'`, which sizes each slide off its own CSS width rather than computing one, so slides won't size/scroll correctly without it.
 
 ## Memberstack setup
 
