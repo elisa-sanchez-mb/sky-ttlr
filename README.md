@@ -20,7 +20,11 @@ All components below live in `sky-ttlr.js`/`sky-ttlr.css`, each under its own cl
 
 **Series swiper** is a Swiper.js carousel for the landing/hero page's CMS-bound series list (`.ttlr_cms_series-wrapper`), wired to Designer's own `.swiper-button-prev`/`.swiper-button-next` elements. Swiper's own bundled CSS is deliberately **not** loaded — it would apply its own positioning and default arrow-glyph styling to those nav buttons, overriding Designer's custom SVG icons and layout — so only the minimal structural CSS Swiper's JS doesn't already handle itself at runtime (`position: relative; overflow: hidden` on the container) lives in `sky-ttlr.css`. Uses a fixed `slidesPerView: 3, spaceBetween: 20` (edited directly on GitHub after the initial `slidesPerView: 'auto'` delivery) — with a fixed number, Swiper computes each slide's width itself, so `.ttlr_cms_series-item` no longer needs an explicit Designer-set width for slides to size correctly.
 
+**Bookmarked episodes carousel** clones a single Designer-authored template slide (`.ttlr_cms_month-item` inside `.ttlr_cms_month-list`, kept as the clone source and never itself shown) once per bookmark, filling in a **snapshot** of that episode's data captured at the moment it was bookmarked — no live lookup against a full episode list needed, so it works on any page. Completion state is the one thing NOT snapshotted — it's read live from `ttl-progress` at render time so a badge here can never go stale relative to actual progress. Removing a bookmark from a card here (`[data-bookmark="btn"]` on the cloned card) re-renders the list and syncs the removal to Memberstack the same write-as-is way the main bookmark toggle does.
+
 **Bookmarks** is a single global button (`[bookmark="btn"]`, not one per episode) that bookmarks whichever episode is currently displayed by the episode router. Clicking it toggles that episode's id and swaps the button's SVG icon between an outline and a solid-filled version of the same path — instantly, since this is local-first like the progress bar (see below). Icon state stays in sync as you page through episodes (each one shows its own bookmarked/not state immediately) and is restored correctly on page load. The background sync to Memberstack writes the current local bookmark list **as-is**, not merged with whatever's already on the server — bookmarks, unlike progress, aren't monotonic (removal is a real, valid action), and merging with a stale remote value used to silently resurrect anything just unbookmarked.
+
+Bookmarks are stored as **snapshot objects** (`{ id, title, month, imgSrc, href }`), not bare id strings — captured from `[data-bookmark-field="title"/"month"/"img"]` on the current episode item at the moment the bookmark button is clicked (see Required Designer steps below). This is what powers the Bookmarked episodes carousel above without needing a separate live lookup. Old data from before this change (a plain array of id strings) is normalized into a stub object on read, so `.id` matching keeps working — it just renders blank fields until that episode is bookmarked again.
 
 ### Local-first storage (bookmarks + progress)
 
@@ -65,13 +69,13 @@ Add to Webflow Site Settings → Custom Code → **Head**:
 <script src="https://cdn.jsdelivr.net/npm/interactjs/dist/interact.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1/dist/confetti.browser.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/swiper@11/swiper-bundle.min.js"></script>
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/elisa-sanchez-mb/sky-ttlr@v1.6.8/sky-ttlr.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/elisa-sanchez-mb/sky-ttlr@v1.6.9/sky-ttlr.css">
 ```
 
 Add to Webflow Site Settings → Custom Code → **before `</body>`** (after `webflow.js` and after Memberstack's own script tag):
 
 ```html
-<script src="https://cdn.jsdelivr.net/gh/elisa-sanchez-mb/sky-ttlr@v1.6.8/sky-ttlr.js"></script>
+<script src="https://cdn.jsdelivr.net/gh/elisa-sanchez-mb/sky-ttlr@v1.6.9/sky-ttlr.js"></script>
 ```
 
 `interact.js`, `canvas-confetti`, and `swiper` are third-party dependencies (drag-drop quiz, the series-end celebration, and the series carousel, respectively) loaded from their own CDNs rather than bundled into `sky-ttlr.js`, so each keeps its own versioning/caching. `interact.js` and `swiper` are optional at runtime — if either fails to load, that one feature no-ops rather than throwing, and everything else is unaffected. `canvas-confetti` is **self-loading**: the Head `<script>` tag above is a nice-to-have (avoids a load delay the first time "Finish Series" is clicked), not a requirement — if it's missing, the script injects it itself on demand, the same self-sufficient pattern the site's own stacked-apps launcher uses for Memberstack. Deliberately **not** loading Swiper's own CSS file — see the Series swiper description above for why.
@@ -89,6 +93,8 @@ These Custom Attributes have to exist on the live markup for the scripts above t
 - **`data-zone-id`** (static, one per zone: `"1"`–`"4"`) and **`data-correct-zone`** (CMS-bound, per prop) — both already present and correctly assigned by the drag-drop script itself at runtime; nothing to add here.
 - **`.ttlr_dragdrop_drop-zone` needs a real height** in Designer — currently an empty div with no set size, which is very likely why zone drops aren't registering.
 - **`[bookmark="btn"]`** — a single button placed once on the page (not inside each `.ttlr_episode_cms_item`), containing the bookmark ribbon SVG with an `<svg><path>` inside it. The script reads/writes that `<path>`'s `d` attribute directly to switch between outline and filled, so the SVG markup needs to be the actual `<svg>`/`<path>` element, not a background-image or other substitute.
+- **`[data-bookmark-field="title"]` / `"month"` / `"img"`** — inside each `.ttlr_episode_cms_item`, whatever elements hold that episode's title/description, a short label (series name/month/category), and its thumbnail (`<img>`) respectively. Read once, at the moment the bookmark button is clicked, to snapshot into `ttl-bookmarks` — see Bookmarks above. Any one missing just leaves that field blank in the snapshot rather than breaking the others.
+- **`.ttlr_cms_month-list` containing exactly one `.ttlr_cms_month-item`** (an `<a>`, with `data-bookmark="thumbnail-wrap"` on its image wrap, `data-bookmark="month"` and `data-bookmark="episode"` on its text fields, and `data-bookmark="btn"` on a remove/bookmark icon inside it) — the template the Bookmarked episodes carousel clones once per bookmark. That single template item is never itself shown; the script removes it and appends one clone per bookmark on every render.
 - **`.notes_copy_success`** — searched for anywhere inside the notes component root (it's a *sibling* of `.notes_actions` in the current Designer markup, not nested inside the copy button), with its own `.notes_copy_close` close button wired up automatically if present. Falls back to an auto-created placeholder only if the element is missing entirely.
 - **`.ttlr_series-end_success`** — a single element placed once on the page (like the bookmark button and progress bar), hidden by default. The script only adds `.is-active` to reveal it when "Finish Series" is clicked; content/layout is Designer's.
 - **`.ttlr_completed_episode_wrap`** — same trigger/pattern as `.ttlr_series-end_success` above (hidden by default, `.is-active` added at the same moment) — a separate element in case the two need different placement/content.
@@ -103,6 +109,6 @@ These Custom Attributes have to exist on the live markup for the scripts above t
 Progress and bookmarks use two **Custom Fields** (Memberstack Dashboard → Settings → Custom Fields — these must be pre-declared, unlike Member JSON), mirroring the exact mechanism the existing app-launcher already uses for its `stacked-apps` field:
 
 - **`ttl-progress`** — JSON-stringified object: `{ episodes: { [episodeId]: { completed, completedAt } }, series: { [seriesId]: { completed, completedAt, completedCount, total } } }` — `completedCount`/`total` are what the home page series card badge reads (see Series cards above); written on every episode completion, not just once a series hits 100%.
-- **`ttl-bookmarks`** — JSON-stringified array of bookmarked episode Item IDs
+- **`ttl-bookmarks`** — JSON-stringified array of bookmark snapshot objects: `{ id, title, month, imgSrc, href }` (see Bookmarks above). Older data may still be a plain array of id strings — normalized on read into a stub object per entry so nothing breaks, just renders blank until re-bookmarked.
 
 Both fields need to be created in the Memberstack dashboard before the scripts above go live. Read/write happens via `getCurrentMember()` + `updateMember({ customFields: {...} })`.
