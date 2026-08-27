@@ -560,10 +560,20 @@ function initEpisodeRouter(listEl) {
     const number = numberOf(item);
     const url = new URL(window.location.href);
     if (number) url.searchParams.set('episode', number);
+
+    const episodeName = fieldsEl?.getAttribute('data-bookmark-name') || (titleH2 ? titleH2.textContent.trim() : '');
+    const seriesNumber = document.body.getAttribute('data-bookmark-series-number') || '';
+    const episodeNumber = fieldsEl?.getAttribute('data-bookmark-number') || number || '';
+    const monthName = document.body.getAttribute('data-bookmark-month') || '';
+    const year = document.body.getAttribute('data-bookmark-year') || '';
+
     return {
       id: idOf(item, index),
-      title: fieldsEl?.getAttribute('data-bookmark-name') || (titleH2 ? titleH2.textContent.trim() : ''),
-      month: document.body.getAttribute('data-bookmark-month') || '',
+      // "S1 EP3: Getting it right" — falls back to the bare episode name if
+      // series/episode numbers aren't available for some reason.
+      title: seriesNumber && episodeNumber ? `S${seriesNumber} EP${episodeNumber}: ${episodeName}` : episodeName,
+      // "July 2026"
+      month: [monthName, year].filter(Boolean).join(' '),
       imgSrc: imgEl ? imgEl.src : '',
       href: url.toString(),
     };
