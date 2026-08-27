@@ -33,11 +33,34 @@ function waitForMemberstack(timeoutMs = 5000) {
   });
 }
 
+// This site's compiled Webflow runtime (timetolearn.schunk...js) re-invokes
+// already-registered Webflow.push callbacks more than once per page (an
+// app-shell/route-transition re-render pattern, not a bug on our end) —
+// confirmed 2026-08-27 via a live stack trace showing it calling back into
+// initSeriesSwiper a second time on an element already carrying
+// .swiper-initialized, which crashed inside Swiper's own internals
+// (getComputedStyle on a non-Element). Without this wrapper, an uncaught
+// throw in one feature's callback silently prevented every OTHER
+// Webflow.push callback registered after it from ever running on that pass
+// — which is why the series card badges and series count label (registered
+// after the swiper) never even logged their "found N" line. Every ttlr
+// Webflow.push callback goes through this now so one feature's failure
+// can never cascade into another's.
+function ttlrReady(label, fn) {
+  window.Webflow ||= [];
+  window.Webflow.push(function () {
+    try {
+      fn();
+    } catch (err) {
+      console.error('[ttlr] ' + label + ': uncaught error — other ttlr features are unaffected', err);
+    }
+  });
+}
+
 /* ---- Episode router: one visible episode at a time, Prev/Next
    navigation, completion tracking in Memberstack. ---- */
 
-window.Webflow ||= [];
-window.Webflow.push(function () {
+ttlrReady('episode router', function () {
   const lists = document.querySelectorAll('.ttlr_episode_cms_list');
   console.log('[ttlr] episode router: found ' + lists.length + ' .ttlr_episode_cms_list element(s) on this page');
   lists.forEach(initEpisodeRouter);
@@ -725,8 +748,7 @@ function initEpisodeRouter(listEl) {
 
 /* ---- Drag & drop matching quiz (interact.js) ---- */
 
-window.Webflow ||= [];
-window.Webflow.push(function () {
+ttlrReady('drag-drop quiz', function () {
   if (typeof interact === 'undefined') {
     console.warn('[ttlr] drag-drop quiz: interact.js is not loaded (typeof interact === "undefined") — check its <script> tag is present and loads before this file.');
     return;
@@ -1009,8 +1031,7 @@ function initTtlrDragDrop(root) {
    Webflow component is placed — localStorage is already global per
    browser/domain, so no page-scoping is needed for that to work. ---- */
 
-window.Webflow ||= [];
-window.Webflow.push(function () {
+ttlrReady('notes pad', function () {
   document.querySelectorAll('.notes_component_wrap').forEach(initNotesPad);
 });
 
@@ -1202,8 +1223,7 @@ function initNotesPad(root) {
    Setup instructions were given directly in chat, not documented in the
    README (by request) — ask if you need them again. ---- */
 
-window.Webflow ||= [];
-window.Webflow.push(function () {
+ttlrReady('series nav', function () {
   document.querySelectorAll('[data-series-nav="source"]').forEach(initSeriesNav);
 });
 
@@ -1308,8 +1328,7 @@ function initSeriesNav(sourceEl) {
    slide sizing/transform via inline styles at runtime (which it does
    regardless of whether its CSS is loaded). ---- */
 
-window.Webflow ||= [];
-window.Webflow.push(function () {
+ttlrReady('series swiper', function () {
   if (typeof Swiper === 'undefined') {
     console.warn('[ttlr] series swiper: Swiper is not loaded — check its <script> tag is present and loads before this file.');
     return;
@@ -1318,6 +1337,19 @@ window.Webflow.push(function () {
 });
 
 function initSeriesSwiper(root) {
+  // This site's Webflow runtime re-fires Webflow.push callbacks more than
+  // once per page (confirmed 2026-08-27) — calling `new Swiper()` again on
+  // an element that already has a live instance throws inside Swiper's own
+  // internals (getComputedStyle on a stale/non-Element reference), which
+  // used to also block every OTHER ttlr feature registered after this one
+  // (see ttlrReady). Swiper stores its instance on the container element
+  // itself once mounted — bail out if it's already there instead of
+  // re-initializing.
+  if (root.swiper) {
+    console.log('[ttlr] series swiper: already initialized on this element, skipping re-init', root);
+    return;
+  }
+
   // Nav buttons are siblings of the swiper container (not descendants), so
   // scope the lookup to the shared parent first; fall back to a page-wide
   // lookup only if that fails.
@@ -1347,8 +1379,7 @@ function initSeriesSwiper(root) {
    Local-first like everything else: paints from localStorage instantly,
    then re-renders once Memberstack hydrates in the background. ---- */
 
-window.Webflow ||= [];
-window.Webflow.push(function () {
+ttlrReady('series card', function () {
   // data-series-id lives on .ttlr_badge (inside .ttlr_completion_tag-wrap),
   // NOT on .ttlr_series_card-wrap itself — confirmed via a live HTML dump
   // 2026-08-27 (an earlier version of this assumed the wrong element and
@@ -1417,8 +1448,7 @@ function initSeriesCard(badgeEl) {
    just counts whatever's actually rendered in .ttlr_cms_series-wrapper.
    Independent of Swiper too (doesn't require it to have loaded/initialized). ---- */
 
-window.Webflow ||= [];
-window.Webflow.push(function () {
+ttlrReady('series count label', function () {
   const labelEl = document.querySelector('#series-number');
   const listEl = document.querySelector('.ttlr_cms_series-wrapper');
   console.log('[ttlr] series count label: #series-number', labelEl, '/ .ttlr_cms_series-wrapper', listEl);
