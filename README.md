@@ -28,6 +28,14 @@ Both bookmarks and progress follow the same pattern as the site's existing app-l
 
 **Notes pad** is a resizable notepad component. Its content is a single shared note stored in `localStorage`, not scoped per page — so the same text shows up and is editable everywhere this Webflow component is placed, since `localStorage` is already global per browser/domain. Dragging `.notes_drag_line` resizes the pad by setting an inline width on `.notes_component_wrap` (assumes the pad is anchored right and the drag line is its left edge — flip the sign in `onPointerMove` if that's backwards for your layout), never below 280px (clamped in JS and backstopped in CSS via `min-width` while `is-open="true"`), and the resized width itself persists across page loads too. `[data-notes-action="copy"]` copies the note to the clipboard and flashes `.notes_copy_success` (`display: flex` while active); `[data-notes-action="delete"]` arms a `.is-confirm` state on first click and clears the note (locally and in `localStorage`) on the second — forced to a clean unarmed state on load (regardless of the Designer markup's static class) and again whenever the pad closes, so a half-armed delete never lingers into the next time it's opened.
 
+## ⚠ This site re-fires Webflow.push callbacks more than once per page
+
+Confirmed 2026-08-27 via a live stack trace: this site's compiled Webflow runtime (`timetolearn.schunk...js`, an app-shell/route-transition style build) calls already-registered `Webflow.push` callbacks again after the initial page load, not just once. This isn't a bug in this repo — it's a property of how this specific site is built — but it means every feature here has to tolerate being initialized more than once on the same element.
+
+Two consequences, both addressed:
+- **A throw in one feature's callback used to silently block every other feature registered after it** for that pass (an uncaught exception inside a `Webflow.push` callback prevents this site's runtime from continuing to the next queued one). This is why, for example, the series card badges and series count label could go completely dark — not because their own code was broken, but because `initSeriesSwiper` (registered earlier in the file) threw first. **Fixed:** every `Webflow.push` registration in this file now goes through a `ttlrReady(label, fn)` wrapper that catches and logs (`console.error`) instead of throwing, so one feature's failure can never cascade into another's.
+- **Re-running an init function on an already-initialized element can itself throw or double up.** Confirmed for the series swiper specifically: calling `new Swiper()` again on a container that already has a live instance crashes inside Swiper's own internals. `initSeriesSwiper` now checks `root.swiper` (Swiper stores its instance there) and skips if already initialized. Other components (episode router, drag-drop quiz, notes pad, series nav, series cards, series count label) haven't shown a *crash* from double-init, but most weren't specifically audited for double-init side effects like duplicate event listeners either — if a future bug looks like "an action fires twice" (a click handler running twice, a debounced save firing more than expected), suspect this same re-render behavior before assuming it's a new bug.
+
 ## Files
 
 | File | Status |
@@ -57,13 +65,13 @@ Add to Webflow Site Settings → Custom Code → **Head**:
 <script src="https://cdn.jsdelivr.net/npm/interactjs/dist/interact.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1/dist/confetti.browser.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/swiper@11/swiper-bundle.min.js"></script>
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/elisa-sanchez-mb/sky-ttlr@v1.6.6/sky-ttlr.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/elisa-sanchez-mb/sky-ttlr@v1.6.7/sky-ttlr.css">
 ```
 
 Add to Webflow Site Settings → Custom Code → **before `</body>`** (after `webflow.js` and after Memberstack's own script tag):
 
 ```html
-<script src="https://cdn.jsdelivr.net/gh/elisa-sanchez-mb/sky-ttlr@v1.6.6/sky-ttlr.js"></script>
+<script src="https://cdn.jsdelivr.net/gh/elisa-sanchez-mb/sky-ttlr@v1.6.7/sky-ttlr.js"></script>
 ```
 
 `interact.js`, `canvas-confetti`, and `swiper` are third-party dependencies (drag-drop quiz, the series-end celebration, and the series carousel, respectively) loaded from their own CDNs rather than bundled into `sky-ttlr.js`, so each keeps its own versioning/caching. `interact.js` and `swiper` are optional at runtime — if either fails to load, that one feature no-ops rather than throwing, and everything else is unaffected. `canvas-confetti` is **self-loading**: the Head `<script>` tag above is a nice-to-have (avoids a load delay the first time "Finish Series" is clicked), not a requirement — if it's missing, the script injects it itself on demand, the same self-sufficient pattern the site's own stacked-apps launcher uses for Memberstack. Deliberately **not** loading Swiper's own CSS file — see the Series swiper description above for why.
