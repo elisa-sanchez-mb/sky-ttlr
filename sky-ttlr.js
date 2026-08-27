@@ -357,15 +357,35 @@ function initEpisodeRouter(listEl) {
     completedEpisodeWrapEl.classList.remove('is-active');
   }
 
-  // Confetti is an optional third-party dependency (canvas-confetti, see
-  // README) — same "load separately, fail quietly if missing" treatment as
-  // interact.js, so a page without that script tag doesn't throw here.
-  function fireConfetti() {
-    if (typeof window.confetti !== 'function') {
-      console.warn('[ttlr] confetti: window.confetti is not available — add the canvas-confetti <script> tag (see README) for the celebration effect.');
+  // Confetti is a third-party dependency (canvas-confetti) — self-loading
+  // rather than requiring a separate Webflow <script> tag (same pattern as
+  // the app-launcher's own loadMemberstack()): if it's not already present
+  // and no matching <script> tag is already loading, this injects one
+  // itself, so the celebration works without a manual setup step.
+  function loadConfettiLib() {
+    return new Promise((resolve) => {
+      if (typeof window.confetti === 'function') return resolve(window.confetti);
+      const existing = document.querySelector('script[src*="canvas-confetti"]');
+      if (existing) {
+        existing.addEventListener('load', () => resolve(window.confetti || null));
+        existing.addEventListener('error', () => resolve(null));
+        return;
+      }
+      const s = document.createElement('script');
+      s.src = 'https://cdn.jsdelivr.net/npm/canvas-confetti@1/dist/confetti.browser.min.js';
+      s.onload = () => resolve(window.confetti || null);
+      s.onerror = () => resolve(null);
+      document.head.appendChild(s);
+    });
+  }
+
+  async function fireConfetti() {
+    const confetti = await loadConfettiLib();
+    if (typeof confetti !== 'function') {
+      console.warn('[ttlr] confetti: could not load canvas-confetti (network/ad-blocker?) — no celebration effect this time.');
       return;
     }
-    window.confetti({ particleCount: 150, spread: 70, origin: { y: 0.6 } });
+    confetti({ particleCount: 150, spread: 70, origin: { y: 0.6 } });
   }
 
   // 30s countdown into [data-series-element="seconds"]. Guards against
@@ -399,7 +419,8 @@ function initEpisodeRouter(listEl) {
     }, 1000);
   }
 
-  function showSeriesEndSuccess() {
+  function showSeriesEndSuccess(episodeItem) {
+    if (episodeItem) episodeItem.style.display = 'none'; // only the success screen should show, not the episode underneath it
     if (seriesEndSuccessEl) seriesEndSuccessEl.classList.add('is-active');
     if (completedEpisodeWrapEl) completedEpisodeWrapEl.classList.add('is-active');
     fireConfetti();
@@ -472,26 +493,17 @@ function initEpisodeRouter(listEl) {
         const { data: member } = await ms.getCurrentMember();
         if (!member) return; // not logged in — nothing to persist to
 
-        // Merge with the server's current value (union, not overwrite), in
-        // case another tab/device changed it since we last hydrated.
-        let remote = [];
-        const raw = member.customFields?.[BOOKMARKS_FIELD];
-        if (raw) {
-          try {
-            const parsed = JSON.parse(raw);
-            remote = Array.isArray(parsed) ? parsed : [];
-          } catch (parseErr) {
-            console.error('[ttlr] Could not parse existing ' + BOOKMARKS_FIELD + ', overwriting with local', parseErr);
-          }
-        }
-        const merged = Array.from(new Set([...remote, ...bookmarksCache]));
-        bookmarksCache = merged;
-        saveLocalBookmarks(merged);
-
+        // Write the current local state AS-IS — deliberately NOT merged
+        // with whatever's remote. Unlike progress (monotonic, only ever
+        // adds), a bookmark can be legitimately removed — union-merging
+        // with a possibly-stale remote array silently resurrected anything
+        // just unbookmarked (confirmed bug: unbookmarking, then trying to
+        // re-bookmark, appeared to do nothing). bookmarksCache is always
+        // the authoritative "what the user's actions actually resulted in".
         await ms.updateMember({
-          customFields: { [BOOKMARKS_FIELD]: JSON.stringify(merged) },
+          customFields: { [BOOKMARKS_FIELD]: JSON.stringify(bookmarksCache) },
         });
-        console.log('[ttlr] bookmarks: synced to Memberstack ->', merged);
+        console.log('[ttlr] bookmarks: synced to Memberstack ->', bookmarksCache);
       } catch (err) {
         console.error('[ttlr] Failed to save bookmark to Memberstack', err);
       }
@@ -659,7 +671,7 @@ function initEpisodeRouter(listEl) {
         if (isLast) {
           console.log('[ttlr] "Finish Series" clicked on episode index ' + index);
           markComplete(idOf(item, index));
-          showSeriesEndSuccess();
+          showSeriesEndSuccess(item);
         } else {
           // Completion happens specifically on Next — landing on an episode
           // (via URL, Prev, or initial load) never marks it complete, only
@@ -984,6 +996,15 @@ function initNotesPad(root) {
   const deleteBtn = root.querySelector('[data-notes-action="delete"]');
   const copyBtn = root.querySelector('[data-notes-action="copy"]');
 
+  // Force a clean unarmed state on load, regardless of whether the static
+  // Designer markup happens to already have .is-confirm on the delete
+  // button (confirmed present in a live HTML dump) — without this, a single
+  // click would immediately delete instead of arming the two-click confirm.
+  if (deleteBtn?.classList.contains('is-confirm')) {
+    console.warn('[ttlr] notes: delete button had .is-confirm already present on load — removing it. Check the Designer markup isn\'t shipping this class by default.');
+    deleteBtn.classList.remove('is-confirm');
+  }
+
   // This textarea lives inside a Webflow form component (for its built-in styling/
   // maxlength), but it's not meant to actually submit anywhere — guard against that.
   if (form) form.addEventListener('submit', (e) => e.preventDefault());
@@ -1055,6 +1076,14 @@ function initNotesPad(root) {
     });
   }
 
+  // The pad's own open/close state (is-open="true"/"false", toggled by a
+  // separate script on [open-notes="btn"]) — used both to gate the
+  // drag-resize width restore below and to reset the delete-confirm arm
+  // state whenever the pad closes.
+  function isOpen() {
+    return root.getAttribute('is-open') === 'true';
+  }
+
   // ---- Delete: first click arms .is-confirm, second click actually clears ----
   if (deleteBtn) {
     deleteBtn.addEventListener('click', () => {
@@ -1104,13 +1133,9 @@ function initNotesPad(root) {
       document.addEventListener('pointerup', onPointerUp);
     });
 
-    // The pad's own open/close state (is-open="true"/"false", toggled by a
-    // separate script on [open-notes="btn"]) always wins over a remembered
-    // drag width — closed means closed, regardless of what was last dragged.
-    function isOpen() {
-      return root.getAttribute('is-open') === 'true';
-    }
-
+    // A remembered drag width always loses to the pad's own closed state —
+    // see the shared is-open observer below, set up regardless of whether
+    // dragLine exists.
     function applySavedWidthIfOpen() {
       if (!isOpen()) return;
       try {
@@ -1122,14 +1147,19 @@ function initNotesPad(root) {
     }
 
     applySavedWidthIfOpen();
-
-    // Watches is-open regardless of what else changes it (jQuery/GSAP toggle,
-    // dev tools, anything) — the moment it's not "true", clear our own inline
-    // width so nothing we've set can hold the pad open past a close action.
-    new MutationObserver(() => {
-      if (!isOpen()) root.style.width = '';
-    }).observe(root, { attributes: true, attributeFilter: ['is-open'] });
   }
+
+  // Watches is-open regardless of what else changes it (jQuery/GSAP toggle,
+  // dev tools, anything) and regardless of whether dragLine/deleteBtn exist —
+  // the moment it's not "true": clears our own inline width so nothing we've
+  // set can hold the pad open past a close action, AND resets the delete
+  // button's confirm-arm state, so reopening the pad after closing it mid-arm
+  // (armed, then closed without confirming) always starts fresh.
+  new MutationObserver(() => {
+    if (isOpen()) return;
+    root.style.width = '';
+    if (deleteBtn?.classList.contains('is-confirm')) deleteBtn.classList.remove('is-confirm');
+  }).observe(root, { attributes: true, attributeFilter: ['is-open'] });
 }
 
 /* ---- Series navigation: Next/Previous Series buttons. Same mechanism as
