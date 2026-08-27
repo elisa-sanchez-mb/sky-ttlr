@@ -513,10 +513,26 @@ function initEpisodeRouter(listEl) {
 
   const BOOKMARKS_LOCAL_KEY = 'ttlr-bookmarks-local';
 
+  // Bookmarks are stored as SNAPSHOT objects, not bare id strings — captured
+  // at the moment of bookmarking from [data-bookmark-field="title"/"month"/
+  // "img"] on the current episode item (see bookmarkDataFor below), so the
+  // bookmarked-episodes carousel elsewhere on the site (see the "bookmarks
+  // list" section near the end of this file) can render real content
+  // without needing a live lookup against a full episode list. Completion
+  // state is deliberately NOT snapshotted — that's read live from
+  // ttl-progress at render time instead, so it can't go stale.
+  // Old data (a plain array of id strings, from before this change)
+  // normalizes into a stub object so .id lookups keep working — it'll just
+  // render blank until that episode is bookmarked again.
+  function normalizeBookmark(entry) {
+    if (typeof entry === 'string') return { id: entry, title: '', month: '', imgSrc: '', href: '' };
+    return entry;
+  }
+
   function loadLocalBookmarks() {
     try {
       const parsed = JSON.parse(window.localStorage.getItem(BOOKMARKS_LOCAL_KEY));
-      return Array.isArray(parsed) ? parsed : [];
+      return Array.isArray(parsed) ? parsed.map(normalizeBookmark) : [];
     } catch (err) {
       console.error('[ttlr] Failed to read local bookmarks cache', err);
       return [];
@@ -529,6 +545,22 @@ function initEpisodeRouter(listEl) {
     } catch (err) {
       console.error('[ttlr] Failed to save local bookmarks cache', err);
     }
+  }
+
+  function bookmarkDataFor(item, index) {
+    const titleEl = item.querySelector('[data-bookmark-field="title"]');
+    const monthEl = item.querySelector('[data-bookmark-field="month"]');
+    const imgEl = item.querySelector('[data-bookmark-field="img"]');
+    const number = numberOf(item);
+    const url = new URL(window.location.href);
+    if (number) url.searchParams.set('episode', number);
+    return {
+      id: idOf(item, index),
+      title: titleEl ? titleEl.textContent.trim() : '',
+      month: monthEl ? monthEl.textContent.trim() : '',
+      imgSrc: imgEl ? imgEl.src : '',
+      href: url.toString(),
+    };
   }
 
   // Local-first, same pattern as progress above (and the stacked-apps
@@ -565,10 +597,12 @@ function initEpisodeRouter(listEl) {
 
   if (bookmarkBtn) {
     // Instant paint from the local cache — no waiting on Memberstack.
-    setBookmarkVisual(bookmarksCache.includes(idOf(items[currentIndex], currentIndex)));
+    setBookmarkVisual(bookmarksCache.some((b) => b.id === idOf(items[currentIndex], currentIndex)));
 
-    // Hydrate from Memberstack in the background and merge (union) — picks up
-    // bookmarks recorded on another device/session, without blocking the paint above.
+    // Hydrate from Memberstack in the background and merge (union, by id —
+    // local's own copy of a bookmark wins on conflict since it reflects
+    // whatever this session most recently did) — picks up bookmarks
+    // recorded on another device/session, without blocking the paint above.
     waitForMemberstack().then(async (ms) => {
       if (!ms) return;
       try {
@@ -578,11 +612,14 @@ function initEpisodeRouter(listEl) {
         console.log('[ttlr] bookmarks: remote ' + BOOKMARKS_FIELD + ' raw value from Memberstack:', raw);
         if (!raw) return;
         const parsed = JSON.parse(raw);
-        const remote = Array.isArray(parsed) ? parsed : [];
-        const merged = Array.from(new Set([...bookmarksCache, ...remote]));
+        const remote = (Array.isArray(parsed) ? parsed : []).map(normalizeBookmark);
+        const byId = new Map();
+        remote.forEach((b) => byId.set(b.id, b));
+        bookmarksCache.forEach((b) => byId.set(b.id, b));
+        const merged = Array.from(byId.values());
         bookmarksCache = merged;
         saveLocalBookmarks(merged);
-        setBookmarkVisual(merged.includes(idOf(items[currentIndex], currentIndex)));
+        setBookmarkVisual(merged.some((b) => b.id === idOf(items[currentIndex], currentIndex)));
       } catch (err) {
         console.error('[ttlr] Failed to read bookmarks from Memberstack', err);
       }
@@ -593,10 +630,10 @@ function initEpisodeRouter(listEl) {
     bookmarkBtn.addEventListener('click', () => {
       console.log('[ttlr] bookmark button clicked');
       const episodeId = idOf(items[currentIndex], currentIndex);
-      const isBookmarked = bookmarksCache.includes(episodeId);
+      const isBookmarked = bookmarksCache.some((b) => b.id === episodeId);
       bookmarksCache = isBookmarked
-        ? bookmarksCache.filter((id) => id !== episodeId)
-        : [...bookmarksCache, episodeId];
+        ? bookmarksCache.filter((b) => b.id !== episodeId)
+        : [...bookmarksCache, bookmarkDataFor(items[currentIndex], currentIndex)];
 
       saveLocalBookmarks(bookmarksCache);
       setBookmarkVisual(!isBookmarked);
@@ -650,7 +687,7 @@ function initEpisodeRouter(listEl) {
     }
 
     updateButtonStates(index);
-    setBookmarkVisual(bookmarksCache.includes(idOf(items[index], index)));
+    setBookmarkVisual(bookmarksCache.some((b) => b.id === idOf(items[index], index)));
   }
 
   function updateButtonStates(index) {
@@ -1444,22 +1481,170 @@ function initSeriesCard(badgeEl) {
 
 /* ---- Series count label: #series-number shows how many series are in the
    CMS-bound list — content data (how many Series items exist here), not
-   member progress, so this is independent of ttl-progress/localStorage and
-   just counts whatever's actually rendered in .ttlr_cms_series-wrapper.
-   Independent of Swiper too (doesn't require it to have loaded/initialized). ---- */
+   member progress, so this is independent of ttl-progress/localStorage.
+   Independent of Swiper too (doesn't require it to have loaded/initialized).
+   Counts .ttlr_cms_series-item directly (not scoped through
+   .ttlr_cms_series-wrapper) — that wrapper class is ALSO used by the
+   bookmarked-episodes carousel (see the "bookmarks list" section below),
+   so a single querySelector('.ttlr_cms_series-wrapper') would be ambiguous
+   about which one it found on a page with both. .ttlr_cms_series-item is
+   unique to the real series list (bookmarks use .ttlr_cms_month-item). ---- */
 
 ttlrReady('series count label', function () {
   const labelEl = document.querySelector('#series-number');
-  const listEl = document.querySelector('.ttlr_cms_series-wrapper');
-  console.log('[ttlr] series count label: #series-number', labelEl, '/ .ttlr_cms_series-wrapper', listEl);
-  if (!labelEl || !listEl) return;
+  const items = document.querySelectorAll('.ttlr_cms_series-item');
+  console.log('[ttlr] series count label: #series-number', labelEl, '/ .ttlr_cms_series-item count', items.length);
+  if (!labelEl) return;
 
-  const count = listEl.querySelectorAll('.ttlr_cms_series-item').length;
-  if (!count) {
+  if (!items.length) {
     labelEl.style.display = 'none';
     return;
   }
   const textEl = labelEl.querySelector('div') || labelEl;
-  textEl.textContent = `${count} Series`;
-  console.log('[ttlr] series count label: found ' + count + ' .ttlr_cms_series-item — wrote "' + textEl.textContent + '"');
+  textEl.textContent = `${items.length} Series`;
+  console.log('[ttlr] series count label: wrote "' + textEl.textContent + '"');
+});
+
+/* ---- Bookmarked episodes carousel: clones a single Designer-authored
+   template slide (.ttlr_cms_month-item, kept as the source — never itself
+   shown) once per bookmark, filling in the SNAPSHOT data captured at
+   bookmark time (see bookmarkDataFor in initEpisodeRouter above) — no live
+   episode lookup needed, so this works on any page regardless of which
+   episodes are actually rendered there. Completion state is read live from
+   ttl-progress (not snapshotted), so a badge here can't go stale. ---- */
+
+ttlrReady('bookmarks list', function () {
+  const listEl = document.querySelector('.ttlr_cms_month-list');
+  const templateEl = listEl?.querySelector('.ttlr_cms_month-item');
+  console.log('[ttlr] bookmarks list: .ttlr_cms_month-list', listEl, '/ template item', templateEl);
+  if (!listEl || !templateEl) return;
+
+  const BOOKMARKS_FIELD = 'ttl-bookmarks';
+  const BOOKMARKS_LOCAL_KEY = 'ttlr-bookmarks-local';
+  const PROGRESS_LOCAL_KEY = 'ttlr-progress-local';
+  const PROGRESS_FIELD = 'ttl-progress';
+
+  function normalizeBookmark(entry) {
+    if (typeof entry === 'string') return { id: entry, title: '', month: '', imgSrc: '', href: '' };
+    return entry;
+  }
+
+  function loadLocalBookmarks() {
+    try {
+      const parsed = JSON.parse(window.localStorage.getItem(BOOKMARKS_LOCAL_KEY));
+      return Array.isArray(parsed) ? parsed.map(normalizeBookmark) : [];
+    } catch (err) {
+      console.error('[ttlr] bookmarks list: failed to read local bookmarks cache', err);
+      return [];
+    }
+  }
+
+  function loadLocalCompletedIds() {
+    try {
+      const local = JSON.parse(window.localStorage.getItem(PROGRESS_LOCAL_KEY)) || {};
+      const episodes = local.episodes || {};
+      return new Set(Object.keys(episodes).filter((id) => episodes[id]?.completed));
+    } catch (err) {
+      console.error('[ttlr] bookmarks list: failed to read local progress cache', err);
+      return new Set();
+    }
+  }
+
+  function removeBookmark(id) {
+    const current = loadLocalBookmarks().filter((b) => b.id !== id);
+    window.localStorage.setItem(BOOKMARKS_LOCAL_KEY, JSON.stringify(current));
+    console.log('[ttlr] bookmarks list: removed bookmark', id, '-> local state now', current);
+
+    // Same debounce-free, write-as-is approach as the main bookmark toggle
+    // in initEpisodeRouter — no merge with remote on save, since a removal
+    // is a real, intentional action that must not get resurrected by a
+    // stale remote array.
+    waitForMemberstack().then(async (ms) => {
+      if (!ms) return;
+      try {
+        const { data: member } = await ms.getCurrentMember();
+        if (!member) return;
+        await ms.updateMember({ customFields: { [BOOKMARKS_FIELD]: JSON.stringify(current) } });
+        console.log('[ttlr] bookmarks list: removal synced to Memberstack ->', current);
+      } catch (err) {
+        console.error('[ttlr] bookmarks list: failed to sync removal to Memberstack', err);
+      }
+    });
+
+    return current;
+  }
+
+  function render(bookmarks, completedIds) {
+    console.log('[ttlr] bookmarks list: rendering ' + bookmarks.length + ' bookmark(s)');
+    listEl.querySelectorAll('.ttlr_cms_month-item').forEach((el) => el.remove());
+
+    bookmarks.forEach((bookmark) => {
+      const card = templateEl.cloneNode(true);
+      card.href = bookmark.href || '#';
+
+      const imgEl = card.querySelector('img');
+      if (imgEl && bookmark.imgSrc) imgEl.src = bookmark.imgSrc;
+
+      const monthEl = card.querySelector('[data-bookmark="month"]');
+      if (monthEl) monthEl.textContent = bookmark.month || '';
+
+      const episodeEl = card.querySelector('[data-bookmark="episode"]');
+      if (episodeEl) episodeEl.textContent = bookmark.title || '';
+
+      const tagWrapEl = card.querySelector('.ttlr_completion_tag-wrap');
+      if (tagWrapEl) tagWrapEl.style.display = completedIds.has(bookmark.id) ? '' : 'none';
+
+      const removeBtn = card.querySelector('[data-bookmark="btn"]');
+      if (removeBtn) {
+        removeBtn.addEventListener('click', (evt) => {
+          evt.preventDefault(); // the card itself is a link — don't navigate on remove
+          evt.stopPropagation();
+          render(removeBookmark(bookmark.id), completedIds);
+        });
+      }
+
+      listEl.appendChild(card);
+    });
+
+    // Swiper mutates/measures slide DOM at mount — if it's already
+    // initialized on this list (via initSeriesSwiper above, which targets
+    // .ttlr_cms_series-wrapper generically and doesn't know or care that
+    // this is the bookmarks list), it needs to be told the slide count
+    // changed rather than left with stale internal measurements.
+    const swiperRoot = listEl.closest('.swiper');
+    if (swiperRoot?.swiper) swiperRoot.swiper.update();
+  }
+
+  render(loadLocalBookmarks(), loadLocalCompletedIds());
+
+  waitForMemberstack().then(async (ms) => {
+    if (!ms) return;
+    try {
+      const { data: member } = await ms.getCurrentMember();
+      if (!member) return;
+
+      const raw = member.customFields?.[BOOKMARKS_FIELD];
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        const remote = (Array.isArray(parsed) ? parsed : []).map(normalizeBookmark);
+        // Union by id, local wins on conflict — same reasoning as the merge
+        // in initEpisodeRouter's own hydrate step.
+        const byId = new Map();
+        remote.forEach((b) => byId.set(b.id, b));
+        loadLocalBookmarks().forEach((b) => byId.set(b.id, b));
+        const merged = Array.from(byId.values());
+        window.localStorage.setItem(BOOKMARKS_LOCAL_KEY, JSON.stringify(merged));
+        render(merged, loadLocalCompletedIds());
+      }
+
+      const progressRaw = member.customFields?.[PROGRESS_FIELD];
+      if (progressRaw) {
+        const remoteEpisodes = JSON.parse(progressRaw).episodes || {};
+        const remoteCompleted = new Set(Object.keys(remoteEpisodes).filter((id) => remoteEpisodes[id]?.completed));
+        render(loadLocalBookmarks(), remoteCompleted);
+      }
+    } catch (err) {
+      console.error('[ttlr] bookmarks list: failed to hydrate from Memberstack', err);
+    }
+  });
 });
