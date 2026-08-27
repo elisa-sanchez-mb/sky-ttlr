@@ -350,7 +350,11 @@ function initEpisodeRouter(listEl) {
   const seriesEndSuccessEl = document.querySelector('.ttlr_series-end_success');
   const completedEpisodeWrapEl = document.querySelector('.ttlr_completed_episode_wrap');
   const seriesSecondsEl = document.querySelector('[data-series-element="seconds"]');
-  console.log('[ttlr] series-end: .ttlr_series-end_success', seriesEndSuccessEl, '/ .ttlr_completed_episode_wrap', completedEpisodeWrapEl, '/ [data-series-element="seconds"]', seriesSecondsEl);
+  // The whole section wrapping the episode viewer (cards, menu row, etc.) —
+  // hidden alongside the episode item itself so the success screen truly
+  // fills the whole screen, not just the space the episode item occupied.
+  const episodeCardsSectionEl = document.querySelector('.ttlr_episode_cards_section');
+  console.log('[ttlr] series-end: .ttlr_series-end_success', seriesEndSuccessEl, '/ .ttlr_completed_episode_wrap', completedEpisodeWrapEl, '/ [data-series-element="seconds"]', seriesSecondsEl, '/ .ttlr_episode_cards_section', episodeCardsSectionEl);
 
   // Force a clean closed state on load, regardless of whether the static
   // Designer markup happens to already have .is-active on either element
@@ -429,8 +433,10 @@ function initEpisodeRouter(listEl) {
 
   function showSeriesEndSuccess(episodeItem) {
     if (episodeItem) episodeItem.style.display = 'none'; // only the success screen should show, not the episode underneath it
+    if (episodeCardsSectionEl) episodeCardsSectionEl.style.display = 'none'; // whole section, so the success screen fills the whole screen
     if (progressBarEl) progressBarEl.style.display = 'none'; // the episode progress bar shouldn't show once the series is done either
     if (progressP) progressP.style.display = 'none';
+    if (bookmarkBtn) bookmarkBtn.style.display = 'none'; // bookmarking a finished episode isn't actionable from this screen
     if (seriesEndSuccessEl) seriesEndSuccessEl.classList.add('is-active');
     if (completedEpisodeWrapEl) completedEpisodeWrapEl.classList.add('is-active');
     fireConfetti();
