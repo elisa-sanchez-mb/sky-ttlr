@@ -1222,3 +1222,44 @@ function initSeriesNav(sourceEl) {
   fillNavContent('next', nextItem);
   fillNavContent('prev', prevItem);
 }
+
+/* ---- Series swiper: landing/hero page series carousel (Swiper.js).
+   Swiper's own bundled CSS is deliberately NOT loaded (see sky-ttlr.css for
+   the small amount of structural CSS used instead) — its default stylesheet
+   would apply its own positioning and arrow-glyph styling to
+   .swiper-button-prev/-next, which here are plain custom elements with
+   their own SVG icons and Designer's own layout. Skipping it keeps that
+   entirely Designer's, at the cost of relying on Swiper's JS to handle
+   slide sizing/transform via inline styles at runtime (which it does
+   regardless of whether its CSS is loaded). ---- */
+
+window.Webflow ||= [];
+window.Webflow.push(function () {
+  if (typeof Swiper === 'undefined') {
+    console.warn('[ttlr] series swiper: Swiper is not loaded — check its <script> tag is present and loads before this file.');
+    return;
+  }
+  document.querySelectorAll('.ttlr_cms_series-wrapper').forEach(initSeriesSwiper);
+});
+
+function initSeriesSwiper(root) {
+  // Nav buttons are siblings of the swiper container (not descendants), so
+  // scope the lookup to the shared parent first; fall back to a page-wide
+  // lookup only if that fails.
+  const scope = root.parentElement || document;
+  const nextEl = scope.querySelector('.swiper-button-next') || document.querySelector('.swiper-button-next');
+  const prevEl = scope.querySelector('.swiper-button-prev') || document.querySelector('.swiper-button-prev');
+  console.log('[ttlr] series swiper: initializing', root, '/ next', nextEl, '/ prev', prevEl);
+
+  // slidesPerView: 'auto' uses each .ttlr_cms_series-item's own CSS width —
+  // that width needs to be set explicitly in Designer for this to size
+  // correctly (unlike a fixed slidesPerView number, which doesn't need it).
+  new Swiper(root, {
+    slidesPerView: 'auto',
+    spaceBetween: 0,
+    navigation: {
+      nextEl,
+      prevEl,
+    },
+  });
+}
