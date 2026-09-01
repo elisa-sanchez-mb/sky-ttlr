@@ -1724,20 +1724,15 @@ ttlrReady('bookmarks list', function () {
   });
 });
 
-/* ---- Prev-content expandable cards: clicking a .ttlr_card-wrap reveals its
-   sibling .ttlr_prev-episodes_wrap. .ttlr_cms_series-wrapper.swiper has
-   overflow: hidden (required for Swiper's own sliding mechanic — otherwise
-   adjacent slides would visibly peek out) — a panel left inside that box
-   would be invisibly clipped no matter how it's positioned, since overflow
-   clips ANY descendant, position: absolute/fixed included, as long as it's
-   still in that ancestor's DOM subtree. So rather than positioning the
-   panel in place, this physically MOVES it (a real DOM move, not a clone —
-   it's live CMS content) into a slot injected right after the whole
-   carousel, in normal document flow. That both escapes the clipping AND
-   means the slot's real height genuinely pushes later page content down —
-   no spacer/height-measuring trick needed. Accordion: only one panel open
-   at a time (moved back to its original spot when a different one opens,
-   or when the same card is clicked again). ---- */
+/* ---- Prev-content expandable cards: clicking a .ttlr_card-wrap.is-rewatch
+   toggles .is-active on its sibling .ttlr_prev-episodes_wrap — in place,
+   nothing is ever moved or removed from the DOM. Accordion: only one panel
+   open at a time. Event delegation on the wrap itself (not per-card
+   listeners from a one-time scan) — this section is a live CMS collection
+   and Finsweet Attributes is loaded site-wide, which can insert collection
+   items into the DOM asynchronously, so a one-time scan at setup time can
+   miss cards that render moments later; delegation reacts to whatever's
+   actually there at click time regardless of when it showed up. ---- */
 
 ttlrReady('prev-content cards', function () {
   const sections = document.querySelectorAll('.ttlr_prev-content_wrap');
@@ -1748,55 +1743,26 @@ ttlrReady('prev-content cards', function () {
 function initPrevContentCards(wrapEl) {
   // This site's Webflow runtime can re-fire Webflow.push callbacks more
   // than once per page (see ttlrReady above) — without this guard, a
-  // re-run would inject a second slot element and attach a second click
-  // listener per card, same class of bug already found/fixed for the notes
-  // pad's open/close toggle.
+  // re-run would attach a second click listener, same class of bug already
+  // found/fixed for the notes pad's open/close toggle.
   if (wrapEl.dataset.ttlrPrevContentWired) return;
   wrapEl.dataset.ttlrPrevContentWired = 'true';
 
-  const swiperRoot = wrapEl.querySelector('.ttlr_cms_series-wrapper');
-  console.log('[ttlr] initPrevContentCards: swiper root', swiperRoot);
-  if (!swiperRoot) return;
+  let openPanel = null;
 
-  const slot = document.createElement('div');
-  slot.className = 'ttlr_prev-content_slot';
-  swiperRoot.insertAdjacentElement('afterend', slot);
-
-  let open = null; // { item, panel, originalNextSibling }
-
-  function closeOpen() {
-    if (!open) return;
-    // Put it back exactly where it came from, not just anywhere in the item.
-    open.item.insertBefore(open.panel, open.originalNextSibling);
-    open.panel.classList.remove('is-active');
-    open = null;
-  }
-
-  // Event delegation on the wrap itself, NOT a per-card listener attached
-  // to a one-time querySelectorAll snapshot — this section is a live CMS
-  // collection (Finsweet Attributes is loaded site-wide, which can insert
-  // collection items into the DOM asynchronously), so a one-time scan at
-  // setup time can find zero cards even though real ones render moments
-  // later. Delegation reacts to whatever's actually in the DOM at click
-  // time, no matter when it was added. .ttlr_card-wrap.is-rewatch (not
-  // plain .ttlr_card-wrap) scopes this to the actual Re-Watch cards — other
-  // sections reuse .ttlr_prev-content_wrap/.ttlr_card-wrap for unrelated
-  // purposes (e.g. #bookmarks) and their clicks are simply ignored here.
   wrapEl.addEventListener('click', (evt) => {
     const cardEl = evt.target.closest('.ttlr_card-wrap.is-rewatch');
     if (!cardEl) return;
-    const item = cardEl.closest('.ttlr_cms_month-item');
-    const panelEl = item?.querySelector('.ttlr_prev-episodes_wrap');
-    if (!item || !panelEl) return;
+    const panelEl = cardEl.closest('.ttlr_cms_month-item')?.querySelector('.ttlr_prev-episodes_wrap');
+    if (!panelEl) return;
 
-    if (open && open.panel === panelEl) {
-      closeOpen();
+    if (openPanel === panelEl) {
+      panelEl.classList.remove('is-active');
+      openPanel = null;
       return;
     }
-    const originalNextSibling = panelEl.nextSibling;
-    closeOpen(); // accordion — only one open at a time
-    slot.appendChild(panelEl);
+    if (openPanel) openPanel.classList.remove('is-active'); // accordion — only one open at a time
     panelEl.classList.add('is-active');
-    open = { item, panel: panelEl, originalNextSibling };
+    openPanel = panelEl;
   });
 }
