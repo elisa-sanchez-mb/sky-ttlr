@@ -1287,7 +1287,12 @@ function initNotesPad(root) {
   // Assumes the pad is anchored to the right (drag_line sits before notes_pad in the
   // DOM, i.e. on its left edge), so dragging left grows it and dragging right shrinks
   // it. If the pad is actually anchored left, flip the sign in onPointerMove below.
-  if (dragLine) {
+  // Resizes .notes_wrap (the inner content wrapper), NOT .notes_component_wrap
+  // (root) itself — root's width is what open/close controls (0 when
+  // closed), separate from how wide the content area is once open.
+  const notesWrapEl = root.querySelector('.notes_wrap');
+
+  if (dragLine && notesWrapEl) {
     let startX = 0;
     let startWidth = 0;
 
@@ -1295,7 +1300,7 @@ function initNotesPad(root) {
       const delta = e.clientX - startX;
       const maxWidth = window.innerWidth - VIEWPORT_MARGIN;
       const nextWidth = Math.min(maxWidth, Math.max(MIN_WIDTH, startWidth - delta));
-      root.style.width = `${nextWidth}px`;
+      notesWrapEl.style.width = `${nextWidth}px`;
     }
 
     function onPointerUp() {
@@ -1303,7 +1308,7 @@ function initNotesPad(root) {
       document.removeEventListener('pointerup', onPointerUp);
       document.documentElement.classList.remove('ttlr-is-resizing');
       try {
-        window.localStorage.setItem(WIDTH_KEY, root.style.width);
+        window.localStorage.setItem(WIDTH_KEY, notesWrapEl.style.width);
       } catch (err) {
         console.error('[ttlr] Failed to save notes pad width to localStorage', err);
       }
@@ -1311,7 +1316,7 @@ function initNotesPad(root) {
 
     dragLine.addEventListener('pointerdown', (e) => {
       startX = e.clientX;
-      startWidth = root.getBoundingClientRect().width;
+      startWidth = notesWrapEl.getBoundingClientRect().width;
       document.documentElement.classList.add('ttlr-is-resizing'); // suppress text selection while dragging
       document.addEventListener('pointermove', onPointerMove);
       document.addEventListener('pointerup', onPointerUp);
@@ -1324,13 +1329,15 @@ function initNotesPad(root) {
       if (!isOpen()) return;
       try {
         const savedWidth = window.localStorage.getItem(WIDTH_KEY);
-        if (savedWidth) root.style.width = savedWidth;
+        if (savedWidth) notesWrapEl.style.width = savedWidth;
       } catch (err) {
         console.error('[ttlr] Failed to read notes pad width from localStorage', err);
       }
     }
 
     applySavedWidthIfOpen();
+  } else if (dragLine && !notesWrapEl) {
+    console.warn('[ttlr] notes: .notes_drag_line found but no .notes_wrap inside this component root — drag-resize will not run.');
   }
 
   // Watches is-open regardless of what else changes it (jQuery/GSAP toggle,
