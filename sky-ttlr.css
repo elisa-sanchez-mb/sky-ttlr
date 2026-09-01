@@ -186,6 +186,20 @@
   touch-action: none; /* required for reliable pointer dragging on touch, same as the quiz props */
 }
 
+/* Open/close animation — replaces a previous GSAP tween to width: 'auto'
+   (GSAP has to estimate an auto width internally, a known source of janky
+   tweens). The open/close toggle in sky-ttlr.js only ever sets `width` to
+   concrete px values (or clears the inline style entirely so Designer's own
+   [is-open="false"] { width: 0 } rule applies) — never 'auto' — so a plain
+   transition on this one property animates smoothly with no JS-driven
+   animation loop needed. Deliberately no overflow rule here — the drag line
+   may rely on overflowing this box slightly for its grab area; add
+   overflow-x: hidden here only if content is actually seen spilling out
+   during the animation. */
+.notes_component_wrap {
+  transition: width 0.4s cubic-bezier(0.65, 0, 0.35, 1);
+}
+
 /* CSS-level backstop matching MIN_WIDTH in sky-ttlr.js — the JS already
    clamps the dragged width, but this guarantees the floor even if something
    else (flex-shrink on a parent, etc.) would otherwise compress the pad
