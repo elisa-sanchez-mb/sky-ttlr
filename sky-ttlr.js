@@ -1093,6 +1093,20 @@ ttlrReady('notes pad', function () {
 });
 
 function initNotesPad(root) {
+  // Unlike every other init function in this file, this one had no
+  // top-level re-run guard — meaning every time this site's Webflow
+  // runtime re-fires Webflow.push (confirmed behavior, see ttlrReady
+  // above), this whole function ran again on the SAME root: a second
+  // textarea input listener, a second copy/delete/drag-line listener, and
+  // a second MutationObserver, all stacking up. The delete button is the
+  // one where that's actually destructive, not just wasteful — two click
+  // listeners firing on ONE click means the first arms .is-confirm and the
+  // second (still handling that same click) sees it already armed and
+  // deletes immediately, skipping the two-click confirm entirely. Root
+  // cause of a 2026-08-27 "notes isn't working" report.
+  if (root.dataset.ttlrNotesPadWired) return;
+  root.dataset.ttlrNotesPadWired = 'true';
+
   const CONTENT_KEY = 'ttlr-notes-content';
   const WIDTH_KEY = 'ttlr-notes-width';
   const MIN_WIDTH = 280; // functional floor — narrower than this and the textarea stops being usable
