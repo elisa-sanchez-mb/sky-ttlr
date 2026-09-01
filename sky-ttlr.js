@@ -527,7 +527,7 @@ function initEpisodeRouter(listEl) {
   // normalizes into a stub object so .id lookups keep working — it'll just
   // render blank until that episode is bookmarked again.
   function normalizeBookmark(entry) {
-    if (typeof entry === 'string') return { id: entry, title: '', month: '', imgSrc: '', href: '' };
+    if (typeof entry === 'string') return { id: entry, title: '', month: '', imgSrc: '', imgSrcset: '', href: '' };
     return entry;
   }
 
@@ -575,6 +575,10 @@ function initEpisodeRouter(listEl) {
       // "July 2026"
       month: [monthName, year].filter(Boolean).join(' '),
       imgSrc: imgEl ? imgEl.src : '',
+      // Webflow images are usually responsive (srcset + sizes) — capture it
+      // too, not just src, so the bookmark card can load the right
+      // resolution per viewport instead of always the largest/default one.
+      imgSrcset: imgEl ? imgEl.srcset : '',
       href: url.toString(),
     };
   }
@@ -1601,7 +1605,7 @@ ttlrReady('bookmarks list', function () {
   const PROGRESS_FIELD = 'ttl-progress';
 
   function normalizeBookmark(entry) {
-    if (typeof entry === 'string') return { id: entry, title: '', month: '', imgSrc: '', href: '' };
+    if (typeof entry === 'string') return { id: entry, title: '', month: '', imgSrc: '', imgSrcset: '', href: '' };
     return entry;
   }
 
@@ -1661,7 +1665,16 @@ ttlrReady('bookmarks list', function () {
       card.href = bookmark.href || '#';
 
       const imgEl = card.querySelector('img');
-      if (imgEl && bookmark.imgSrc) imgEl.src = bookmark.imgSrc;
+      if (imgEl && bookmark.imgSrc) {
+        imgEl.src = bookmark.imgSrc;
+        // The cloned template's own srcset (if any) takes priority over src
+        // in the browser's image selection — left as-is, it would keep
+        // showing the template's default image at matching viewport widths
+        // even after src is updated. Overwrite it with the snapshotted
+        // srcset (or clear it if none was captured) so src is what actually
+        // renders.
+        imgEl.srcset = bookmark.imgSrcset || '';
+      }
 
       const monthEl = card.querySelector('[data-bookmark="month"]');
       if (monthEl) monthEl.textContent = bookmark.month || '';
