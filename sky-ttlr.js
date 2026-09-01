@@ -1723,3 +1723,36 @@ ttlrReady('bookmarks list', function () {
     }
   });
 });
+
+/* ---- Prev-content expandable cards: clicking a .ttlr_card-wrap.is-rewatch
+   toggles .is-open on its .ttlr_cms_month-item (accordion — only one open
+   at a time). Wrapped in ttlrReady/guarded the same as every other feature
+   in this file, since this site's Webflow runtime can re-fire Webflow.push
+   callbacks more than once per page — without the guard, a re-run would
+   attach a second click listener per card. ---- */
+
+ttlrReady('prev-content cards', function () {
+  if (document.body.dataset.ttlrPrevContentWired) return;
+  document.body.dataset.ttlrPrevContentWired = 'true';
+
+  document.querySelectorAll('.ttlr_card-wrap.is-rewatch').forEach((card) => {
+    card.addEventListener('click', function () {
+      const monthItem = this.closest('.ttlr_cms_month-item');
+      if (!monthItem) return;
+
+      const isCurrentlyOpen = monthItem.classList.contains('is-open');
+
+      // close every other open month item
+      document.querySelectorAll('.ttlr_cms_month-item.is-open').forEach((item) => {
+        if (item !== monthItem) item.classList.remove('is-open');
+      });
+
+      // toggle this one
+      if (isCurrentlyOpen) {
+        monthItem.classList.remove('is-open');
+      } else {
+        monthItem.classList.add('is-open');
+      }
+    });
+  });
+});
