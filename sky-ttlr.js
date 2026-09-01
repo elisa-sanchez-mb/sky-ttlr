@@ -1109,7 +1109,7 @@ function initNotesPad(root) {
 
   const CONTENT_KEY = 'ttlr-notes-content';
   const WIDTH_KEY = 'ttlr-notes-width';
-  const MIN_WIDTH = 380; // functional floor — narrower than this and the textarea stops being usable
+  const MIN_WIDTH = 528; // functional floor — narrower than this and the textarea stops being usable
   const VIEWPORT_MARGIN = 64; // keep the pad from ever fully covering the viewport
 
   const textarea = root.querySelector('.ttlr_notes_text-area');
