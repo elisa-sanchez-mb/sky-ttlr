@@ -194,7 +194,7 @@
    see initNotesPad in sky-ttlr.js), scoped under is-open="true" so it never
    fights the closed (width: 0) state. */
 .notes_component_wrap[is-open="true"] .notes_wrap {
-  min-width: 280px;
+  min-width: 528px;
 }
 
 /* Suppresses text selection site-wide while actively dragging the resize handle */
