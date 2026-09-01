@@ -1755,18 +1755,8 @@ function initPrevContentCards(wrapEl) {
   wrapEl.dataset.ttlrPrevContentWired = 'true';
 
   const swiperRoot = wrapEl.querySelector('.ttlr_cms_series-wrapper');
-  // .ttlr_card-wrap.is-rewatch (not plain .ttlr_card-wrap) — .ttlr_prev-
-  // content_wrap is reused by other sections that don't want this behavior
-  // at all (the #bookmarks carousel has its own .ttlr_card-wrap with a
-  // completely different, non-expandable purpose) — confirmed via a live
-  // HTML dump 2026-08-27. Filtering here means a wrap with no .is-rewatch
-  // cards (like #bookmarks) skips this function entirely, so it doesn't
-  // even inject an unused slot into a section that doesn't need one.
-  const items = Array.from(wrapEl.querySelectorAll('.ttlr_cms_month-item')).filter((item) =>
-    item.querySelector('.ttlr_card-wrap.is-rewatch')
-  );
-  console.log('[ttlr] initPrevContentCards: found ' + items.length + ' .ttlr_cms_month-item element(s) with a .ttlr_card-wrap.is-rewatch, swiper root', swiperRoot);
-  if (!items.length || !swiperRoot) return;
+  console.log('[ttlr] initPrevContentCards: swiper root', swiperRoot);
+  if (!swiperRoot) return;
 
   const slot = document.createElement('div');
   slot.className = 'ttlr_prev-content_slot';
@@ -1782,22 +1772,31 @@ function initPrevContentCards(wrapEl) {
     open = null;
   }
 
-  items.forEach((item) => {
-    const cardEl = item.querySelector('.ttlr_card-wrap.is-rewatch');
-    const panelEl = item.querySelector('.ttlr_prev-episodes_wrap');
-    if (!cardEl || !panelEl) return;
+  // Event delegation on the wrap itself, NOT a per-card listener attached
+  // to a one-time querySelectorAll snapshot — this section is a live CMS
+  // collection (Finsweet Attributes is loaded site-wide, which can insert
+  // collection items into the DOM asynchronously), so a one-time scan at
+  // setup time can find zero cards even though real ones render moments
+  // later. Delegation reacts to whatever's actually in the DOM at click
+  // time, no matter when it was added. .ttlr_card-wrap.is-rewatch (not
+  // plain .ttlr_card-wrap) scopes this to the actual Re-Watch cards — other
+  // sections reuse .ttlr_prev-content_wrap/.ttlr_card-wrap for unrelated
+  // purposes (e.g. #bookmarks) and their clicks are simply ignored here.
+  wrapEl.addEventListener('click', (evt) => {
+    const cardEl = evt.target.closest('.ttlr_card-wrap.is-rewatch');
+    if (!cardEl) return;
+    const item = cardEl.closest('.ttlr_cms_month-item');
+    const panelEl = item?.querySelector('.ttlr_prev-episodes_wrap');
+    if (!item || !panelEl) return;
 
-    cardEl.style.cursor = 'pointer';
-    cardEl.addEventListener('click', () => {
-      if (open && open.panel === panelEl) {
-        closeOpen();
-        return;
-      }
-      const originalNextSibling = panelEl.nextSibling;
-      closeOpen(); // accordion — only one open at a time
-      slot.appendChild(panelEl);
-      panelEl.classList.add('is-active');
-      open = { item, panel: panelEl, originalNextSibling };
-    });
+    if (open && open.panel === panelEl) {
+      closeOpen();
+      return;
+    }
+    const originalNextSibling = panelEl.nextSibling;
+    closeOpen(); // accordion — only one open at a time
+    slot.appendChild(panelEl);
+    panelEl.classList.add('is-active');
+    open = { item, panel: panelEl, originalNextSibling };
   });
 }
