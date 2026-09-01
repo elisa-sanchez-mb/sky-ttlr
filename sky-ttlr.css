@@ -273,6 +273,5 @@ html.ttlr-is-resizing * {
    wouldn't be clipped to the container and could visibly overflow before
    Swiper's JS finishes initializing. */
 .ttlr_cms_series-wrapper.swiper {
-  position: relative;
   overflow: hidden;
 }
