@@ -276,3 +276,16 @@ html.ttlr-is-resizing * {
   position: relative;
   overflow: hidden;
 }
+
+/* ---- Prev-content expandable cards ---- */
+
+/* Hidden while sitting dormant inside its own .ttlr_cms_month-item (inside
+   the clipped swiper — see sky-ttlr.js) — only shown once JS moves it into
+   .ttlr_prev-content_slot and adds .is-active. */
+.ttlr_prev-episodes_wrap {
+  display: none;
+}
+
+.ttlr_prev-episodes_wrap.is-active {
+  display: block;
+}
