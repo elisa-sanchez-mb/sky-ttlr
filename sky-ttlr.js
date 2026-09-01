@@ -1584,9 +1584,14 @@ ttlrReady('series count label', function () {
    ttl-progress (not snapshotted), so a badge here can't go stale. ---- */
 
 ttlrReady('bookmarks list', function () {
-  const listEl = document.querySelector('.ttlr_cms_month-list');
+  // Scoped to #bookmarks specifically — .ttlr_cms_month-list is NOT unique
+  // to this section (the Re-Watch carousel and its own per-month episode
+  // lists all reuse the same class), confirmed via a live HTML dump
+  // 2026-08-27. A page-wide querySelector would grab whichever one happens
+  // to come first in the DOM, not necessarily this one.
+  const listEl = document.querySelector('#bookmarks .ttlr_cms_month-list');
   const templateEl = listEl?.querySelector('.ttlr_cms_month-item');
-  console.log('[ttlr] bookmarks list: .ttlr_cms_month-list', listEl, '/ template item', templateEl);
+  console.log('[ttlr] bookmarks list: #bookmarks .ttlr_cms_month-list', listEl, '/ template item', templateEl);
   if (!listEl || !templateEl) return;
 
   const BOOKMARKS_FIELD = 'ttl-bookmarks';
@@ -1750,8 +1755,17 @@ function initPrevContentCards(wrapEl) {
   wrapEl.dataset.ttlrPrevContentWired = 'true';
 
   const swiperRoot = wrapEl.querySelector('.ttlr_cms_series-wrapper');
-  const items = Array.from(wrapEl.querySelectorAll('.ttlr_cms_month-item'));
-  console.log('[ttlr] initPrevContentCards: found ' + items.length + ' .ttlr_cms_month-item element(s), swiper root', swiperRoot);
+  // .ttlr_card-wrap.is-rewatch (not plain .ttlr_card-wrap) — .ttlr_prev-
+  // content_wrap is reused by other sections that don't want this behavior
+  // at all (the #bookmarks carousel has its own .ttlr_card-wrap with a
+  // completely different, non-expandable purpose) — confirmed via a live
+  // HTML dump 2026-08-27. Filtering here means a wrap with no .is-rewatch
+  // cards (like #bookmarks) skips this function entirely, so it doesn't
+  // even inject an unused slot into a section that doesn't need one.
+  const items = Array.from(wrapEl.querySelectorAll('.ttlr_cms_month-item')).filter((item) =>
+    item.querySelector('.ttlr_card-wrap.is-rewatch')
+  );
+  console.log('[ttlr] initPrevContentCards: found ' + items.length + ' .ttlr_cms_month-item element(s) with a .ttlr_card-wrap.is-rewatch, swiper root', swiperRoot);
   if (!items.length || !swiperRoot) return;
 
   const slot = document.createElement('div');
@@ -1769,7 +1783,7 @@ function initPrevContentCards(wrapEl) {
   }
 
   items.forEach((item) => {
-    const cardEl = item.querySelector('.ttlr_card-wrap');
+    const cardEl = item.querySelector('.ttlr_card-wrap.is-rewatch');
     const panelEl = item.querySelector('.ttlr_prev-episodes_wrap');
     if (!cardEl || !panelEl) return;
 
