@@ -1754,3 +1754,69 @@ ttlrReady('prev-content cards', function () {
     });
   });
 });
+
+/* ---- Series card fill bar only (no completion badge): for
+   .ttlr_series_card-wrap instances that don't want the "Completed"/"3/5"
+   badge at all — e.g. the nested episode cards inside the Re-Watch
+   expandable panels — but still want the mini progress fill. Unlike
+   initSeriesCard above, this needs no [data-series-id] Designer attribute:
+   the series slug is read straight off the card's own href
+   (/serie/<slug>), the exact same slug already used as data-series-id
+   everywhere else. Cards that DO have a badge are skipped here entirely —
+   those are already fully handled by initSeriesCard (badge text + fill
+   bar together); this is only for the badge-less ones. ---- */
+
+ttlrReady('series card fill', function () {
+  const cards = Array.from(document.querySelectorAll('.ttlr_series_card-wrap')).filter(
+    (card) => !card.querySelector('.ttlr_badge[data-series-id]')
+  );
+  console.log('[ttlr] series card fill: found ' + cards.length + ' badge-less .ttlr_series_card-wrap element(s)');
+  cards.forEach(initSeriesCardFill);
+});
+
+function initSeriesCardFill(cardEl) {
+  const fillEl = cardEl.querySelector('.ttlr_series_card-inner');
+  if (!fillEl) return;
+
+  let seriesId = '';
+  try {
+    const path = new URL(cardEl.href, window.location.origin).pathname;
+    const match = path.match(/\/serie\/([^/]+)/);
+    seriesId = match ? match[1] : '';
+  } catch (err) {
+    console.error('[ttlr] series card fill: failed to parse seriesId from href', cardEl.href, err);
+  }
+  console.log('[ttlr] initSeriesCardFill: seriesId', seriesId, '/ fill el', fillEl);
+  if (!seriesId) return;
+
+  const PROGRESS_FIELD = 'ttl-progress';
+  const PROGRESS_LOCAL_KEY = 'ttlr-progress-local';
+
+  function render(seriesProgress) {
+    const entry = seriesProgress?.[seriesId];
+    if (!entry || !entry.total) return;
+    fillEl.style.width = `${Math.min(100, (entry.completedCount / entry.total) * 100)}%`;
+  }
+
+  let local = {};
+  try {
+    local = JSON.parse(window.localStorage.getItem(PROGRESS_LOCAL_KEY)) || {};
+  } catch (err) {
+    console.error('[ttlr] series card fill: failed to read local progress cache', err);
+  }
+  render(local.series);
+
+  waitForMemberstack().then(async (ms) => {
+    if (!ms) return;
+    try {
+      const { data: member } = await ms.getCurrentMember();
+      if (!member) return;
+      const raw = member.customFields?.[PROGRESS_FIELD];
+      if (!raw) return;
+      const remote = JSON.parse(raw);
+      render(remote.series);
+    } catch (err) {
+      console.error('[ttlr] series card fill: failed to read remote progress', err);
+    }
+  });
+}
