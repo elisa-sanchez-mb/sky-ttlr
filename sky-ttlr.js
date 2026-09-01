@@ -1718,3 +1718,72 @@ ttlrReady('bookmarks list', function () {
     }
   });
 });
+
+/* ---- Prev-content expandable cards: clicking a .ttlr_card-wrap reveals its
+   sibling .ttlr_prev-episodes_wrap. .ttlr_cms_series-wrapper.swiper has
+   overflow: hidden (required for Swiper's own sliding mechanic — otherwise
+   adjacent slides would visibly peek out) — a panel left inside that box
+   would be invisibly clipped no matter how it's positioned, since overflow
+   clips ANY descendant, position: absolute/fixed included, as long as it's
+   still in that ancestor's DOM subtree. So rather than positioning the
+   panel in place, this physically MOVES it (a real DOM move, not a clone —
+   it's live CMS content) into a slot injected right after the whole
+   carousel, in normal document flow. That both escapes the clipping AND
+   means the slot's real height genuinely pushes later page content down —
+   no spacer/height-measuring trick needed. Accordion: only one panel open
+   at a time (moved back to its original spot when a different one opens,
+   or when the same card is clicked again). ---- */
+
+ttlrReady('prev-content cards', function () {
+  const sections = document.querySelectorAll('.ttlr_prev-content_wrap');
+  console.log('[ttlr] prev-content cards: found ' + sections.length + ' .ttlr_prev-content_wrap element(s)');
+  sections.forEach(initPrevContentCards);
+});
+
+function initPrevContentCards(wrapEl) {
+  // This site's Webflow runtime can re-fire Webflow.push callbacks more
+  // than once per page (see ttlrReady above) — without this guard, a
+  // re-run would inject a second slot element and attach a second click
+  // listener per card, same class of bug already found/fixed for the notes
+  // pad's open/close toggle.
+  if (wrapEl.dataset.ttlrPrevContentWired) return;
+  wrapEl.dataset.ttlrPrevContentWired = 'true';
+
+  const swiperRoot = wrapEl.querySelector('.ttlr_cms_series-wrapper');
+  const items = Array.from(wrapEl.querySelectorAll('.ttlr_cms_month-item'));
+  console.log('[ttlr] initPrevContentCards: found ' + items.length + ' .ttlr_cms_month-item element(s), swiper root', swiperRoot);
+  if (!items.length || !swiperRoot) return;
+
+  const slot = document.createElement('div');
+  slot.className = 'ttlr_prev-content_slot';
+  swiperRoot.insertAdjacentElement('afterend', slot);
+
+  let open = null; // { item, panel, originalNextSibling }
+
+  function closeOpen() {
+    if (!open) return;
+    // Put it back exactly where it came from, not just anywhere in the item.
+    open.item.insertBefore(open.panel, open.originalNextSibling);
+    open.panel.classList.remove('is-active');
+    open = null;
+  }
+
+  items.forEach((item) => {
+    const cardEl = item.querySelector('.ttlr_card-wrap');
+    const panelEl = item.querySelector('.ttlr_prev-episodes_wrap');
+    if (!cardEl || !panelEl) return;
+
+    cardEl.style.cursor = 'pointer';
+    cardEl.addEventListener('click', () => {
+      if (open && open.panel === panelEl) {
+        closeOpen();
+        return;
+      }
+      const originalNextSibling = panelEl.nextSibling;
+      closeOpen(); // accordion — only one open at a time
+      slot.appendChild(panelEl);
+      panelEl.classList.add('is-active');
+      open = { item, panel: panelEl, originalNextSibling };
+    });
+  });
+}
