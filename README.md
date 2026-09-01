@@ -30,6 +30,8 @@ Bookmarks are stored as **snapshot objects** (`{ id, title, month, imgSrc, href 
 
 Both bookmarks and progress follow the same pattern as the site's existing app-launcher (`stacked-apps`): every click updates a `localStorage` cache and repaints the UI **synchronously** — no network round-trip on the click path — and a Memberstack write is queued afterward, debounced 500ms (`SAVE_DEBOUNCE_MS`) so rapid clicks collapse into a single write instead of one per click. On load, the UI paints instantly from the local cache, then the script hydrates from Memberstack in the background and **merges additively** (a completion or bookmark recorded on either side wins — nothing is ever un-set by a merge), so state recorded on another device/session isn't lost. Local cache keys: `ttlr-progress-local`, `ttlr-bookmarks-local`.
 
+**Notes pad**'s open/close toggle (`[open-notes="btn"]`, which appears twice in the live markup — the menu bar's own open button and the pad's own close icon, both wired identically) now lives in `sky-ttlr.js` and animates via a plain CSS `transition: width` on `.notes_component_wrap`, driven only by concrete px values — `getStoredWidth()` on open, clearing the inline style on close so Designer's own `[is-open="false"] { width: 0 }` rule takes over. This replaces a separate jQuery + GSAP `<script>` that tweened to `width: 'auto'` (a known source of janky auto-width animation) — **delete that old inline script from Custom Code now that this handles it** (same reasoning as the original duplicate-script cleanup — see the warning near the top of this file). Wiring is idempotent per button (`data-ttlr-notes-wired`), since this site's Webflow runtime can re-fire `Webflow.push` callbacks more than once per page (see the note further down) — without that guard, a re-run would've attached a second listener and toggled the state twice per click.
+
 **Notes pad** is a resizable notepad component. Its content is a single shared note stored in `localStorage`, not scoped per page — so the same text shows up and is editable everywhere this Webflow component is placed, since `localStorage` is already global per browser/domain. Dragging `.notes_drag_line` resizes the pad by setting an inline width on `.notes_component_wrap` (assumes the pad is anchored right and the drag line is its left edge — flip the sign in `onPointerMove` if that's backwards for your layout), never below 280px (clamped in JS and backstopped in CSS via `min-width` while `is-open="true"`), and the resized width itself persists across page loads too. `[data-notes-action="copy"]` copies the note to the clipboard and flashes `.notes_copy_success` (`display: flex` while active); `[data-notes-action="delete"]` arms a `.is-confirm` state on first click and clears the note (locally and in `localStorage`) on the second — forced to a clean unarmed state on load (regardless of the Designer markup's static class) and again whenever the pad closes, so a half-armed delete never lingers into the next time it's opened.
 
 ## ⚠ This site re-fires Webflow.push callbacks more than once per page
@@ -69,13 +71,13 @@ Add to Webflow Site Settings → Custom Code → **Head**:
 <script src="https://cdn.jsdelivr.net/npm/interactjs/dist/interact.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1/dist/confetti.browser.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/swiper@11/swiper-bundle.min.js"></script>
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/elisa-sanchez-mb/sky-ttlr@v1.7.1/sky-ttlr.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/elisa-sanchez-mb/sky-ttlr@v1.7.2/sky-ttlr.css">
 ```
 
 Add to Webflow Site Settings → Custom Code → **before `</body>`** (after `webflow.js` and after Memberstack's own script tag):
 
 ```html
-<script src="https://cdn.jsdelivr.net/gh/elisa-sanchez-mb/sky-ttlr@v1.7.1/sky-ttlr.js"></script>
+<script src="https://cdn.jsdelivr.net/gh/elisa-sanchez-mb/sky-ttlr@v1.7.2/sky-ttlr.js"></script>
 ```
 
 `interact.js`, `canvas-confetti`, and `swiper` are third-party dependencies (drag-drop quiz, the series-end celebration, and the series carousel, respectively) loaded from their own CDNs rather than bundled into `sky-ttlr.js`, so each keeps its own versioning/caching. `interact.js` and `swiper` are optional at runtime — if either fails to load, that one feature no-ops rather than throwing, and everything else is unaffected. `canvas-confetti` is **self-loading**: the Head `<script>` tag above is a nice-to-have (avoids a load delay the first time "Finish Series" is clicked), not a requirement — if it's missing, the script injects it itself on demand, the same self-sufficient pattern the site's own stacked-apps launcher uses for Memberstack. Deliberately **not** loading Swiper's own CSS file — see the Series swiper description above for why.
