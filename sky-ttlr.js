@@ -1188,6 +1188,50 @@ function initNotesPad(root) {
     return root.getAttribute('is-open') === 'true';
   }
 
+  function getStoredWidth() {
+    try {
+      const saved = window.localStorage.getItem(WIDTH_KEY);
+      const parsed = saved ? parseFloat(saved) : NaN;
+      return Number.isFinite(parsed) && parsed >= MIN_WIDTH ? parsed : MIN_WIDTH;
+    } catch (err) {
+      console.error('[ttlr] Failed to read notes pad width from localStorage', err);
+      return MIN_WIDTH;
+    }
+  }
+
+  // ---- Open/close toggle ----
+  // Was a separate jQuery + GSAP <script> in Custom Code (gsap.to(width:
+  // 'auto')) — GSAP animating TO an 'auto' width has to estimate that width
+  // internally, which is a well-known source of visibly janky/inconsistent
+  // tweens. Replaced with a plain CSS transition (see .notes_component_wrap
+  // in sky-ttlr.css) driven only by concrete px values (never 'auto'), so
+  // the browser can animate it natively without any estimation step.
+  //
+  // That old script (and this one) both run via window.Webflow.push, and
+  // this site's Webflow runtime re-fires already-registered push callbacks
+  // more than once per page (see ttlrReady above) — re-running initNotesPad
+  // without a guard would attach a SECOND, THIRD... click listener to the
+  // same button, each one toggling is-open again on a single click. That's
+  // very likely the real cause of "clunky" behavior, not just GSAP's
+  // auto-width estimation — data-ttlr-notes-wired makes wiring idempotent
+  // regardless of how many times this function re-runs on the same button.
+  document.querySelectorAll('[open-notes="btn"]').forEach((btn) => {
+    if (btn.dataset.ttlrNotesWired) return;
+    btn.dataset.ttlrNotesWired = 'true';
+    btn.addEventListener('click', () => {
+      if (isOpen()) {
+        root.setAttribute('is-open', 'false');
+        // Clear the inline width so Designer's own [is-open="false"] { width: 0 }
+        // rule can drive it back down — an inline px value here would outrank
+        // that rule by specificity and the pad would never actually close.
+        root.style.width = '';
+      } else {
+        root.setAttribute('is-open', 'true');
+        root.style.width = `${getStoredWidth()}px`;
+      }
+    });
+  });
+
   // ---- Delete: first click arms .is-confirm, second click actually clears ----
   if (deleteBtn) {
     deleteBtn.addEventListener('click', () => {
