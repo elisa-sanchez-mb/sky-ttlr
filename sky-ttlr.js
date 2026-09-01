@@ -1206,68 +1206,6 @@ function initNotesPad(root) {
     return root.getAttribute('is-open') === 'true';
   }
 
-  function getStoredWidth() {
-    try {
-      const saved = window.localStorage.getItem(WIDTH_KEY);
-      const parsed = saved ? parseFloat(saved) : NaN;
-      return Number.isFinite(parsed) && parsed >= MIN_WIDTH ? parsed : MIN_WIDTH;
-    } catch (err) {
-      console.error('[ttlr] Failed to read notes pad width from localStorage', err);
-      return MIN_WIDTH;
-    }
-  }
-
-  // ---- Open/close toggle (GSAP-driven — reverted 2026-08-27 per explicit
-  // request; the plain-CSS-transition version still read as glitchy in
-  // practice despite fixing the original 'auto'-width estimation jank) ----
-  // Still deliberately never tweens TO 'auto' — that's the specific thing
-  // that made the ORIGINAL separate inline script's animation janky (GSAP
-  // has to estimate an auto width internally). Only ever concrete px
-  // values here, same as before, just animated via GSAP now instead of a
-  // native CSS transition. Do NOT also add a CSS `transition: width` on
-  // .notes_component_wrap alongside this — a CSS transition and a JS tween
-  // fighting over the same property every frame is itself a classic source
-  // of stutter, which is part of why this file no longer has one.
-  //
-  // This site's Webflow runtime re-fires already-registered Webflow.push
-  // callbacks more than once per page (see ttlrReady above) — without the
-  // guard below, a re-run would attach a SECOND, THIRD... click listener to
-  // the same button, each one toggling is-open again on a single click.
-  document.querySelectorAll('[open-notes="btn"]').forEach((btn) => {
-    if (btn.dataset.ttlrNotesWired) return;
-    btn.dataset.ttlrNotesWired = 'true';
-    btn.addEventListener('click', () => {
-      const hasGsap = typeof window.gsap !== 'undefined';
-      if (isOpen()) {
-        root.setAttribute('is-open', 'false');
-        if (hasGsap) {
-          gsap.to(root, {
-            width: 0,
-            duration: 0.4,
-            ease: 'power2.inOut',
-            // Clear the inline width once the tween lands so Designer's own
-            // [is-open="false"] { width: 0 } rule owns the closed state
-            // afterward — an inline px value left sitting here would
-            // outrank that rule by specificity.
-            onComplete: () => { root.style.width = ''; },
-          });
-        } else {
-          console.warn('[ttlr] notes: GSAP not loaded — closing without animation.');
-          root.style.width = '';
-        }
-      } else {
-        root.setAttribute('is-open', 'true');
-        const targetWidth = getStoredWidth();
-        if (hasGsap) {
-          gsap.to(root, { width: targetWidth, duration: 0.4, ease: 'power2.inOut' });
-        } else {
-          console.warn('[ttlr] notes: GSAP not loaded — opening without animation.');
-          root.style.width = `${targetWidth}px`;
-        }
-      }
-    });
-  });
-
   // ---- Delete: first click arms .is-confirm, second click actually clears ----
   if (deleteBtn) {
     deleteBtn.addEventListener('click', () => {
