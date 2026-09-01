@@ -263,15 +263,3 @@ html.ttlr-is-resizing * {
   height: 100%;
   background-image: linear-gradient(90deg, #FF8C00 5.03%, #F80032 25.04%, #FF00A0 45.04%, #8C28FF 65.06%, #0023FF 82.04%, #19A0FF 96.05%), linear-gradient(90deg, #FF6400 11.81%, #FF0A50 50.11%, #FF00A5 88.92%);
 }
-
-/* ---- Series swiper ---- */
-
-/* The only structural CSS Swiper's JS doesn't apply itself at runtime
-   (slide sizing/transform/flex all come from Swiper via inline styles
-   regardless of whether its own stylesheet is loaded — see sky-ttlr.js for
-   why that stylesheet is deliberately skipped). Without this, slides
-   wouldn't be clipped to the container and could visibly overflow before
-   Swiper's JS finishes initializing. */
-.ttlr_cms_series-wrapper.swiper {
-  overflow: hidden;
-}
