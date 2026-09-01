@@ -279,9 +279,13 @@ html.ttlr-is-resizing * {
 
 /* ---- Prev-content expandable cards ---- */
 
-/* Hidden while sitting dormant inside its own .ttlr_cms_month-item (inside
-   the clipped swiper — see sky-ttlr.js) — only shown once JS moves it into
-   .ttlr_prev-content_slot and adds .is-active. */
+/* Hidden by default — shown in place when its .ttlr_card-wrap.is-rewatch
+   sibling is clicked (see initPrevContentCards in sky-ttlr.js), which just
+   toggles .is-active. Nothing is moved or removed from the DOM. Note: this
+   sits inside .ttlr_cms_series-wrapper.swiper, which has overflow: hidden
+   for Swiper's own sliding mechanic — if the panel needs to visually
+   escape that box's width/height, that overflow will clip it regardless of
+   this toggle, and needs handling separately (e.g. in Designer). */
 .ttlr_prev-episodes_wrap {
   display: none;
 }
