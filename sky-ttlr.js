@@ -1591,7 +1591,8 @@ ttlrReady('bookmarks list', function () {
   // to come first in the DOM, not necessarily this one.
   const listEl = document.querySelector('#bookmarks .ttlr_cms_month-list');
   const templateEl = listEl?.querySelector('.ttlr_cms_month-item');
-  console.log('[ttlr] bookmarks list: #bookmarks .ttlr_cms_month-list', listEl, '/ template item', templateEl);
+  const sectionEl = document.querySelector('#bookmarks');
+  console.log('[ttlr] bookmarks list: #bookmarks .ttlr_cms_month-list', listEl, '/ template item', templateEl, '/ section', sectionEl);
   if (!listEl || !templateEl) return;
 
   const BOOKMARKS_FIELD = 'ttl-bookmarks';
@@ -1651,6 +1652,8 @@ ttlrReady('bookmarks list', function () {
 
   function render(bookmarks, completedIds) {
     console.log('[ttlr] bookmarks list: rendering ' + bookmarks.length + ' bookmark(s)');
+    // Whole section hidden, not just the list, when there's nothing to show.
+    if (sectionEl) sectionEl.style.display = bookmarks.length ? '' : 'none';
     listEl.querySelectorAll('.ttlr_cms_month-item').forEach((el) => el.remove());
 
     bookmarks.forEach((bookmark) => {
@@ -1671,6 +1674,11 @@ ttlrReady('bookmarks list', function () {
 
       const removeBtn = card.querySelector('[data-bookmark="btn"]');
       if (removeBtn) {
+        // Every card here IS a bookmark by definition — always shown filled/
+        // bookmarked, no outline-vs-filled toggle needed like the episode
+        // page's own bookmark button. Designer styles .is-bookmarked however
+        // it wants (fill color, background, etc.).
+        removeBtn.classList.add('is-bookmarked');
         removeBtn.addEventListener('click', (evt) => {
           evt.preventDefault(); // the card itself is a link — don't navigate on remove
           evt.stopPropagation();
