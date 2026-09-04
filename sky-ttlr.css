@@ -260,6 +260,17 @@ html.ttlr-is-resizing * {
   -webkit-overflow-scrolling: touch;
   scrollbar-width: none;
   -ms-overflow-style: none;
+  /* `overflow-x: auto` forces the browser to compute overflow-y as `auto`
+     too (a box can't be scrollable on one axis and visible on the other,
+     per the CSS Overflow spec) — that clips Designer's own
+     `.is-open`/`:hover` scale(1.1) pop-out on each card, which used to be
+     unclipped under the old transform-based Swiper (no overflow at all on
+     this element there). padding-block gives the scaled card room to
+     render before it hits this box's edge; the matching negative
+     margin-block cancels the padding's effect on the carousel's own
+     position on the page, so nothing shifts. */
+  padding-block: 24px;
+  margin-block: -24px;
 }
 
 .ttlr_cms_series-wrapper.swiper-css-mode > .swiper-wrapper::-webkit-scrollbar {
