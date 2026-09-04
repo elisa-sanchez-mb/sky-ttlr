@@ -240,3 +240,16 @@ html.ttlr-is-resizing * {
   height: 100%;
   background-image: linear-gradient(90deg, #FF8C00 5.03%, #F80032 25.04%, #FF00A0 45.04%, #8C28FF 65.06%, #0023FF 82.04%, #19A0FF 96.05%), linear-gradient(90deg, #FF6400 11.81%, #FF0A50 50.11%, #FF00A5 88.92%);
 }
+
+/* The Re-Watch outer month-list carousel runs in Swiper's cssMode (native
+   scroll, not a JS transform) — see initSeriesSwiper in sky-ttlr.js for why.
+   Swiper's own bundled CSS (not loaded here) normally hides the resulting
+   native scrollbar; this replaces just that one rule, cross-browser. */
+.ttlr_cms_series-wrapper.swiper-css-mode {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.ttlr_cms_series-wrapper.swiper-css-mode::-webkit-scrollbar {
+  display: none;
+}
