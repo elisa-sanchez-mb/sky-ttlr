@@ -1846,3 +1846,70 @@ ttlrReady('hero cta', function () {
     }
   });
 });
+
+/* ---- Prev-content month badge: .ttlr_completion_tag-wrap on each month's
+   own .ttlr_card-wrap.is-rewatch is "Completed" in Designer's static
+   markup unconditionally — this hides it unless EVERY series featured that
+   month (the nested .ttlr_series_card-wrap cards inside its own
+   .ttlr_prev-episodes_wrap) is fully completed. Read-only with respect to
+   those nested cards — only their href is read (to derive each series id,
+   same /serie/<slug> technique used elsewhere), nothing about them is
+   written, so this can't interact with initSeriesCard or any other
+   series-card feature the way the now-reverted fill-bar attempt did. ---- */
+
+ttlrReady('prev-content month badge', function () {
+  const monthItems = Array.from(document.querySelectorAll('.ttlr_prev-content_wrap .ttlr_cms_month-item'));
+  console.log('[ttlr] prev-content month badge: found ' + monthItems.length + ' .ttlr_cms_month-item element(s)');
+  if (!monthItems.length) return;
+
+  const entries = monthItems
+    .map((monthItem) => {
+      const badgeEl = monthItem.querySelector(':scope > .ttlr_card-wrap.is-rewatch > .ttlr_completion_tag-wrap');
+      const seriesIds = Array.from(monthItem.querySelectorAll('.ttlr_prev-episodes_wrap .ttlr_series_card-wrap'))
+        .map((card) => {
+          try {
+            const path = new URL(card.href, window.location.origin).pathname;
+            return path.match(/\/serie\/([^/]+)/)?.[1] || null;
+          } catch (err) {
+            return null;
+          }
+        })
+        .filter(Boolean);
+      return { badgeEl, seriesIds };
+    })
+    .filter((entry) => entry.badgeEl && entry.seriesIds.length);
+  console.log('[ttlr] prev-content month badge: ' + entries.length + ' month(s) with a badge + series id(s)', entries);
+  if (!entries.length) return;
+
+  const PROGRESS_FIELD = 'ttl-progress';
+  const PROGRESS_LOCAL_KEY = 'ttlr-progress-local';
+
+  function render(seriesProgress) {
+    entries.forEach(({ badgeEl, seriesIds }) => {
+      const allComplete = seriesIds.every((id) => seriesProgress?.[id]?.completed);
+      badgeEl.style.display = allComplete ? '' : 'none';
+    });
+  }
+
+  let local = {};
+  try {
+    local = JSON.parse(window.localStorage.getItem(PROGRESS_LOCAL_KEY)) || {};
+  } catch (err) {
+    console.error('[ttlr] prev-content month badge: failed to read local progress cache', err);
+  }
+  render(local.series);
+
+  waitForMemberstack().then(async (ms) => {
+    if (!ms) return;
+    try {
+      const { data: member } = await ms.getCurrentMember();
+      if (!member) return;
+      const raw = member.customFields?.[PROGRESS_FIELD];
+      if (!raw) return;
+      const remote = JSON.parse(raw);
+      render(remote.series);
+    } catch (err) {
+      console.error('[ttlr] prev-content month badge: failed to read remote progress', err);
+    }
+  });
+});
