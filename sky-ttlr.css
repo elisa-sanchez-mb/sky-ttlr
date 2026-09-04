@@ -263,6 +263,21 @@ html.ttlr-is-resizing * {
    via `.ttlr_cms_month-item.is-open .ttlr_prev-episodes_wrap` — once moved
    here the panel is no longer a descendant of that selector at all, so the
    same open/close animation is duplicated here instead. */
+
+/* The slot must stay in NORMAL document flow — the whole point of moving
+   the panel here (instead of leaving it overlaid) is that opening it
+   should push later content (e.g. #bookmarks, right after the Re-Watch
+   section) down the page, not float over it. Forced back to `static`
+   because a Designer-authored element for this class (added directly in
+   the Designer canvas, not by this script) defaults to `position: absolute`
+   — !important since Designer's own canvas styling on a class can carry
+   higher effective specificity than a plain class selector here (same
+   pattern documented elsewhere in this project, e.g.
+   .ttlr_completed_episode_wrap). */
+.ttlr_prev-content_slot {
+  position: static !important;
+}
+
 .ttlr_prev-content_slot .ttlr_prev-episodes_wrap {
   height: 0;
   overflow: hidden;
