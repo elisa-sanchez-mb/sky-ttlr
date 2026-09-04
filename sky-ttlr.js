@@ -1489,7 +1489,23 @@ function initSeriesSwiper(root) {
   const isHeroSeries = !!root.closest('.ttlr_hero_series-wrap');
   const nextEl = scope.querySelector('.swiper-button-next') || (isHeroSeries ? document.querySelector('.swiper-button-next') : undefined);
   const prevEl = scope.querySelector('.swiper-button-prev') || (isHeroSeries ? document.querySelector('.swiper-button-prev') : undefined);
-  console.log('[ttlr] series swiper: initializing', root, '/ isHeroSeries', isHeroSeries, '/ next', nextEl, '/ prev', prevEl);
+
+  // The Re-Watch outer month-list carousel has ANOTHER swiper nested inside
+  // each of its own slides (.ttlr_prev-episodes_wrap's per-month episode
+  // list). Swiper's default drag mechanic continuously sets
+  // `transform: translate3d(...)` on THIS swiper's own .swiper-wrapper while
+  // dragging — and per the CSS spec, an element carrying a transform becomes
+  // the containing block for its position:absolute/fixed descendants. That
+  // broke the nested swiper's layout the instant the outer carousel was
+  // dragged (confirmed 2026-09-05 by the user: "it's the 3d transform
+  // property that breaks it... when I drag the parent swiper"). cssMode
+  // avoids the JS transform entirely by using native browser scrolling
+  // instead, so nothing nested inside its slides is ever re-contained
+  // mid-drag. Only applied to a wrapper that actually HAS a nested swiper —
+  // every other carousel (hero, bookmarks, the nested episode lists
+  // themselves) keeps the default transform-based Swiper.
+  const hasNestedSwiper = !!root.querySelector('.ttlr_prev-episodes_wrap');
+  console.log('[ttlr] series swiper: initializing', root, '/ isHeroSeries', isHeroSeries, '/ hasNestedSwiper', hasNestedSwiper, '/ next', nextEl, '/ prev', prevEl);
 
   // slidesPerView: 'auto' uses each .ttlr_cms_series-item's own CSS width —
   // that width needs to be set explicitly in Designer for this to size
@@ -1497,6 +1513,7 @@ function initSeriesSwiper(root) {
   new Swiper(root, {
     slidesPerView: 3,
     spaceBetween: 20,
+    cssMode: hasNestedSwiper,
     navigation: (nextEl || prevEl) ? { nextEl, prevEl } : undefined,
   });
 }
