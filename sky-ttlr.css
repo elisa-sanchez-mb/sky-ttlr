@@ -243,15 +243,31 @@ html.ttlr-is-resizing * {
 
 /* The Re-Watch outer month-list carousel runs in Swiper's cssMode (native
    scroll, not a JS transform) — see initSeriesSwiper in sky-ttlr.js for why.
-   Swiper's own bundled CSS (not loaded here) normally hides the resulting
-   native scrollbar; this replaces just that one rule, cross-browser. */
-.ttlr_cms_series-wrapper.swiper-css-mode {
+   cssMode needs its actual scrolling element (.swiper-wrapper — the flex
+   row of slides, not the outer .swiper root) to have overflow-x: auto;
+   Swiper's own JS does NOT set this inline, it depends entirely on Swiper's
+   bundled CSS (swiper-bundle.min.css) to supply it — which this project
+   deliberately doesn't load (see the Series swiper note in the README).
+   Without it, cssMode has no scrollable element at all, so the carousel
+   doesn't respond to drag/swipe/scroll whatsoever (confirmed 2026-09-05 by
+   the user: "first swiper doesn't work"). This replicates just the minimum
+   Swiper's own CSS would have provided for cssMode, plus native scroll-snap
+   so it still settles on a slide boundary like the transform-based version
+   did, and hides the resulting native scrollbar cross-browser. */
+.ttlr_cms_series-wrapper.swiper-css-mode > .swiper-wrapper {
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  -webkit-overflow-scrolling: touch;
   scrollbar-width: none;
   -ms-overflow-style: none;
 }
 
-.ttlr_cms_series-wrapper.swiper-css-mode::-webkit-scrollbar {
+.ttlr_cms_series-wrapper.swiper-css-mode > .swiper-wrapper::-webkit-scrollbar {
   display: none;
+}
+
+.ttlr_cms_series-wrapper.swiper-css-mode > .swiper-wrapper > .swiper-slide {
+  scroll-snap-align: start;
 }
 
 /* Prev-content expandable cards: the open month's episode panel
