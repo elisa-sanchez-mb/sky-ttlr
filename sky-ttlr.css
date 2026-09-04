@@ -241,44 +241,29 @@ html.ttlr-is-resizing * {
   background-image: linear-gradient(90deg, #FF8C00 5.03%, #F80032 25.04%, #FF00A0 45.04%, #8C28FF 65.06%, #0023FF 82.04%, #19A0FF 96.05%), linear-gradient(90deg, #FF6400 11.81%, #FF0A50 50.11%, #FF00A5 88.92%);
 }
 
-/* The Re-Watch outer month-list carousel runs in Swiper's cssMode (native
-   scroll, not a JS transform) — see initSeriesSwiper in sky-ttlr.js for why.
-   cssMode needs its actual scrolling element (.swiper-wrapper — the flex
-   row of slides, not the outer .swiper root) to have overflow-x: auto;
-   Swiper's own JS does NOT set this inline, it depends entirely on Swiper's
-   bundled CSS (swiper-bundle.min.css) to supply it — which this project
-   deliberately doesn't load (see the Series swiper note in the README).
-   Without it, cssMode has no scrollable element at all, so the carousel
-   doesn't respond to drag/swipe/scroll whatsoever (confirmed 2026-09-05 by
-   the user: "first swiper doesn't work"). This replicates just the minimum
-   Swiper's own CSS would have provided for cssMode, plus native scroll-snap
-   so it still settles on a slide boundary like the transform-based version
-   did, and hides the resulting native scrollbar cross-browser. */
-.ttlr_cms_series-wrapper.swiper-css-mode > .swiper-wrapper {
-  overflow-x: auto;
-  scroll-snap-type: x mandatory;
-  -webkit-overflow-scrolling: touch;
-  scrollbar-width: none;
-  -ms-overflow-style: none;
-  /* `overflow-x: auto` forces the browser to compute overflow-y as `auto`
-     too (a box can't be scrollable on one axis and visible on the other,
-     per the CSS Overflow spec) — that clips Designer's own
-     `.is-open`/`:hover` scale(1.1) pop-out on each card, which used to be
-     unclipped under the old transform-based Swiper (no overflow at all on
-     this element there). padding-block gives the scaled card room to
-     render before it hits this box's edge; the matching negative
-     margin-block cancels the padding's effect on the carousel's own
-     position on the page, so nothing shifts. */
-  padding-block: 24px;
-  margin-block: -24px;
+/* Swiper's own bundled CSS is loaded now (added directly in Webflow Custom
+   Code Head — outside this repo). It handles slide sizing/wrapper
+   transforms/scroll entirely on its own; the only thing it does that
+   Designer doesn't want is repositioning/reglyphing .swiper-button-prev/-next
+   (its own absolutely-positioned default arrow glyphs) — these are Designer's
+   own custom SVG-icon buttons in Designer's own layout, not Swiper's. This
+   neutralizes just that part; everything else about the official stylesheet
+   is left alone. (2026-09-05: this replaces an earlier attempt at running
+   WITHOUT Swiper's CSS at all, manually replicating just the pieces this
+   project's own carousels needed — that approach caused a real regression
+   of its own, see git history around cssMode/swiper-css-mode if this ever
+   needs to be revisited.) */
+.swiper-button-prev,
+.swiper-button-next {
+  position: static;
+  width: auto;
+  height: auto;
+  margin-top: 0;
 }
 
-.ttlr_cms_series-wrapper.swiper-css-mode > .swiper-wrapper::-webkit-scrollbar {
-  display: none;
-}
-
-.ttlr_cms_series-wrapper.swiper-css-mode > .swiper-wrapper > .swiper-slide {
-  scroll-snap-align: start;
+.swiper-button-prev::after,
+.swiper-button-next::after {
+  content: none;
 }
 
 /* Prev-content expandable cards: the open month's episode panel
