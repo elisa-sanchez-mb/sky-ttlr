@@ -253,3 +253,22 @@ html.ttlr-is-resizing * {
 .ttlr_cms_series-wrapper.swiper-css-mode::-webkit-scrollbar {
   display: none;
 }
+
+/* Prev-content expandable cards: the open month's episode panel
+   (.ttlr_prev-episodes_wrap) is physically relocated into this slot on
+   open — a sibling of the Re-Watch swiper root, never a descendant of
+   anything Swiper transforms/scrolls, so it stays fixed regardless of
+   carousel position (see initPrevContentCards's click handling in
+   sky-ttlr.js). The page's own embedded CSS animates this panel's height
+   via `.ttlr_cms_month-item.is-open .ttlr_prev-episodes_wrap` — once moved
+   here the panel is no longer a descendant of that selector at all, so the
+   same open/close animation is duplicated here instead. */
+.ttlr_prev-content_slot .ttlr_prev-episodes_wrap {
+  height: 0;
+  overflow: hidden;
+  transition: height 0.4s ease;
+}
+
+.ttlr_prev-content_slot.is-open .ttlr_prev-episodes_wrap {
+  height: 20rem;
+}
