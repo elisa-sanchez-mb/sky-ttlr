@@ -1413,14 +1413,17 @@ function initSeriesNav(sourceEl) {
 }
 
 /* ---- Series swiper: landing/hero page series carousel (Swiper.js).
-   Swiper's own bundled CSS is deliberately NOT loaded (see sky-ttlr.css for
-   the small amount of structural CSS used instead) — its default stylesheet
-   would apply its own positioning and arrow-glyph styling to
-   .swiper-button-prev/-next, which here are plain custom elements with
-   their own SVG icons and Designer's own layout. Skipping it keeps that
-   entirely Designer's, at the cost of relying on Swiper's JS to handle
-   slide sizing/transform via inline styles at runtime (which it does
-   regardless of whether its CSS is loaded). ---- */
+   Swiper's own bundled CSS IS loaded (added directly in Webflow Custom Code
+   Head, alongside the existing swiper-bundle.min.js — outside this repo).
+   Its default stylesheet would otherwise reposition/reglyph
+   .swiper-button-prev/-next (Designer's own custom SVG-icon buttons, not
+   Swiper's default arrows) — sky-ttlr.css neutralizes just that part, so
+   everything else (slide sizing, wrapper transform/scroll, cssMode's own
+   base styling if ever needed again) comes from the official stylesheet
+   instead of being manually replicated here, which is what caused a real
+   clipping regression the one time this project tried to run without it
+   (2026-09-05, cssMode's manual overflow-x:auto — see initSeriesSwiper's
+   own comment below for the full history). ---- */
 
 // Calls initSeriesSwiper on one element without letting a throw escape —
 // critical because this is used inside Array.prototype.forEach, and forEach
@@ -1490,30 +1493,32 @@ function initSeriesSwiper(root) {
   const nextEl = scope.querySelector('.swiper-button-next') || (isHeroSeries ? document.querySelector('.swiper-button-next') : undefined);
   const prevEl = scope.querySelector('.swiper-button-prev') || (isHeroSeries ? document.querySelector('.swiper-button-prev') : undefined);
 
-  // The Re-Watch outer month-list carousel has ANOTHER swiper nested inside
-  // each of its own slides (.ttlr_prev-episodes_wrap's per-month episode
-  // list). Swiper's default drag mechanic continuously sets
-  // `transform: translate3d(...)` on THIS swiper's own .swiper-wrapper while
-  // dragging — and per the CSS spec, an element carrying a transform becomes
-  // the containing block for its position:absolute/fixed descendants. That
-  // broke the nested swiper's layout the instant the outer carousel was
-  // dragged (confirmed 2026-09-05 by the user: "it's the 3d transform
-  // property that breaks it... when I drag the parent swiper"). cssMode
-  // avoids the JS transform entirely by using native browser scrolling
-  // instead, so nothing nested inside its slides is ever re-contained
-  // mid-drag. Only applied to a wrapper that actually HAS a nested swiper —
-  // every other carousel (hero, bookmarks, the nested episode lists
-  // themselves) keeps the default transform-based Swiper.
-  const hasNestedSwiper = !!root.querySelector('.ttlr_prev-episodes_wrap');
-  console.log('[ttlr] series swiper: initializing', root, '/ isHeroSeries', isHeroSeries, '/ hasNestedSwiper', hasNestedSwiper, '/ next', nextEl, '/ prev', prevEl);
+  console.log('[ttlr] series swiper: initializing', root, '/ isHeroSeries', isHeroSeries, '/ next', nextEl, '/ prev', prevEl);
 
   // slidesPerView: 'auto' uses each .ttlr_cms_series-item's own CSS width —
   // that width needs to be set explicitly in Designer for this to size
   // correctly (unlike a fixed slidesPerView number, which doesn't need it).
+  //
+  // NOT running cssMode (2026-09-05, reverted): the Re-Watch outer
+  // month-list carousel briefly ran in cssMode because its default
+  // transform-based drag mechanic used to break the layout of the nested
+  // per-month episode swiper living inside its slides (a transformed
+  // ancestor becomes the containing block for position:absolute/fixed
+  // descendants). That's no longer the mechanism in play — the OPEN month's
+  // nested swiper is now physically relocated out of the slide into a
+  // static slot the instant it opens (see initPrevContentCards below), so
+  // it's never actually a descendant of this carousel's transformed wrapper
+  // while visible/interactive. cssMode's own manual CSS replication (no
+  // bundled Swiper CSS was loaded) introduced a real regression of its own
+  // (overflow-x:auto forces overflow-y to clip too, cropping Designer's
+  // .is-open/:hover scale(1.1) card effect) — reverted in favor of loading
+  // Swiper's own bundled CSS instead (added directly in Webflow Custom Code
+  // Head, outside this repo) plus a small override in sky-ttlr.css keeping
+  // .swiper-button-prev/-next on Designer's own layout instead of Swiper's
+  // default absolute-positioned arrow glyphs.
   new Swiper(root, {
     slidesPerView: 3,
     spaceBetween: 20,
-    cssMode: hasNestedSwiper,
     navigation: (nextEl || prevEl) ? { nextEl, prevEl } : undefined,
   });
 }
