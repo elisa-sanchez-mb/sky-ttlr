@@ -208,7 +208,6 @@ function initEpisodeRouter(listEl) {
           // match the field's actual Key (as opposed to its dashboard Label).
           console.warn('[ttlr] progress: updateMember response did NOT include "' + PROGRESS_FIELD + '" — the write was likely silently rejected by Memberstack. Check Settings → Custom Fields → the progress field\'s exact Key matches PROGRESS_FIELD = "' + PROGRESS_FIELD + '" (not just its Label).');
         }
-        updateProgressDisplay(merged.episodes);
       } catch (err) {
         console.error('[ttlr] Failed to save episode completion to Memberstack', err);
       }
@@ -251,7 +250,6 @@ function initEpisodeRouter(listEl) {
     }
 
     saveLocalProgress(progressCache);
-    updateProgressDisplay(progressCache.episodes);
     console.log('[ttlr] markComplete: local state updated instantly, Memberstack sync queued', progressCache);
     saveProgressToMemberstackDebounced();
   }
@@ -272,11 +270,15 @@ function initEpisodeRouter(listEl) {
 
   let lastProgressPercent = null; // null = no comparison basis yet, so the first paint never "pulses"
 
-  function updateProgressDisplay(episodesProgress) {
+  // Shows WHERE the learner currently is (currentIndex + 1 / total), not how
+  // many episodes are marked complete — driven entirely by show(), not by
+  // progressCache. Takes no argument on purpose: completion data (local or
+  // Memberstack) no longer affects what this bar displays.
+  function updateProgressDisplay() {
     const total = items.length;
-    const completed = items.filter((item, i) => episodesProgress?.[idOf(item, i)]?.completed).length;
-    const percent = total ? (completed / total) * 100 : 0;
-    console.log('[ttlr] updateProgressDisplay: ' + completed + '/' + total + ' (' + percent.toFixed(1) + '%)');
+    const current = total ? currentIndex + 1 : 0;
+    const percent = total ? (current / total) * 100 : 0;
+    console.log('[ttlr] updateProgressDisplay: episode ' + current + '/' + total + ' (' + percent.toFixed(1) + '%)');
 
     if (progressFill) {
       // Only ever reveals more/less of Designer's own gradient via clip-path —
@@ -297,17 +299,14 @@ function initEpisodeRouter(listEl) {
       lastProgressPercent = percent;
     }
 
-    // Structure is <span>completed</span><span>/</span><span>total</span><span class="...">COMPLETED</span>
+    // Structure is <span>current</span><span>/</span><span>total</span><span class="...">COMPLETED</span>
     // — no distinguishing attribute on the count spans, so this relies on position.
     if (progressP) {
       const counts = progressP.children;
-      if (counts[0]) counts[0].textContent = String(completed);
+      if (counts[0]) counts[0].textContent = String(current);
       if (counts[2]) counts[2].textContent = String(total);
     }
   }
-
-  // Instant paint from the local cache — no waiting on Memberstack.
-  updateProgressDisplay(progressCache.episodes);
 
   // ---- Segment mask: measures each .ttlr_progress_segment's ACTUAL rendered
   // position (whatever Designer's own layout/CSS produces — flex, grid,
@@ -376,7 +375,6 @@ function initEpisodeRouter(listEl) {
       };
       progressCache = merged;
       saveLocalProgress(merged);
-      updateProgressDisplay(merged.episodes);
     } catch (err) {
       console.error('[ttlr] Failed to read progress for progress bar', err);
     }
@@ -670,6 +668,7 @@ function initEpisodeRouter(listEl) {
     const outgoingItem = hasShownOnce ? items[currentIndex] : null;
     const incomingItem = items[index];
     currentIndex = index;
+    updateProgressDisplay();
 
     if (!outgoingItem || outgoingItem === incomingItem) {
       // First paint (or somehow re-showing the same item): instant, no fade.
