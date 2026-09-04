@@ -1422,31 +1422,41 @@ function initSeriesNav(sourceEl) {
    slide sizing/transform via inline styles at runtime (which it does
    regardless of whether its CSS is loaded). ---- */
 
+// Calls initSeriesSwiper on one element without letting a throw escape —
+// critical because this is used inside Array.prototype.forEach, and forEach
+// does NOT continue past an uncaught exception in one callback invocation;
+// a single element failing to init would otherwise silently abort every
+// element still left in the loop. Confirmed 2026-09-04: this is exactly why
+// EVERY nested .ttlr_cms_series-wrapper inside .ttlr_prev-episodes_wrap
+// (8 of them, one per month) stayed uninitialized while the hero/Re-Watch-
+// outer/bookmarks wrappers (all earlier in document order, or initialized
+// via a wholly separate code path — see the bookmarks list's own render())
+// worked fine — whatever throws on the FIRST nested wrapper it reaches was
+// silently killing the whole rest of that querySelectorAll pass.
+function initSeriesSwiperSafe(root) {
+  try {
+    initSeriesSwiper(root);
+  } catch (err) {
+    console.error('[ttlr] series swiper: initSeriesSwiper threw for this element — every OTHER element still gets processed, but this one stays un-swiped', root, err);
+  }
+}
+
 ttlrReady('series swiper', function () {
   if (typeof Swiper === 'undefined') {
     console.warn('[ttlr] series swiper: Swiper is not loaded — check its <script> tag is present and loads before this file.');
     return;
   }
-  document.querySelectorAll('.ttlr_cms_series-wrapper').forEach(initSeriesSwiper);
+  document.querySelectorAll('.ttlr_cms_series-wrapper').forEach(initSeriesSwiperSafe);
 
-  // The nested per-month series list inside .ttlr_prev-episodes_wrap (the
-  // Re-Watch accordion panel) reuses this same wrapper class, but — unlike
-  // the outer month-list carousel — its content is loaded asynchronously
-  // (confirmed 2026-09-04 via a live HTML dump: the outer wrapper carried
-  // Swiper's own "swiper-initialized" class and its slides had real inline
-  // width/margin styles from Swiper, but EVERY nested wrapper had neither,
-  // despite being fully populated with real episode data). The one-time
-  // querySelectorAll scan above runs before Finsweet has inserted any of
-  // these nested wrappers, so they're never handed to initSeriesSwiper at
-  // all. A MutationObserver catches them whenever they actually appear,
-  // instead of depending on this site's re-fired Webflow.push callbacks
-  // (ROOT CAUSE #2) to eventually re-scan at the right moment.
+  // Fallback for the (separate, still-possible) case of genuinely
+  // asynchronously-inserted CMS content this one-time scan can't see yet —
+  // catches any .ttlr_cms_series-wrapper added to the DOM after this point.
   const seriesSwiperObserver = new MutationObserver((mutations) => {
     mutations.forEach((mutation) => {
       mutation.addedNodes.forEach((node) => {
         if (node.nodeType !== 1) return;
-        if (node.matches?.('.ttlr_cms_series-wrapper')) initSeriesSwiper(node);
-        node.querySelectorAll?.('.ttlr_cms_series-wrapper').forEach(initSeriesSwiper);
+        if (node.matches?.('.ttlr_cms_series-wrapper')) initSeriesSwiperSafe(node);
+        node.querySelectorAll?.('.ttlr_cms_series-wrapper').forEach(initSeriesSwiperSafe);
       });
     });
   });
@@ -1726,7 +1736,7 @@ ttlrReady('bookmarks list', function () {
       if (swiperRoot.swiper) {
         swiperRoot.swiper.update();
       } else if (typeof Swiper !== 'undefined') {
-        initSeriesSwiper(swiperRoot);
+        initSeriesSwiperSafe(swiperRoot);
       }
     }
   }
