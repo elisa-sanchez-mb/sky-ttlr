@@ -1427,7 +1427,21 @@ ttlrReady('series swiper', function () {
     console.warn('[ttlr] series swiper: Swiper is not loaded — check its <script> tag is present and loads before this file.');
     return;
   }
-  document.querySelectorAll('.ttlr_cms_series-wrapper').forEach(initSeriesSwiper);
+  document.querySelectorAll('.ttlr_cms_series-wrapper').forEach((el) => {
+    // .ttlr_prev-episodes_wrap (the Re-Watch accordion panel revealed per
+    // month) reuses this same wrapper class for its own nested per-month
+    // series list — that list is meant to lay out statically inside the
+    // opened panel, not scroll as its own carousel. Swiper's JS applies
+    // `transform: translate3d(...)` (and other positioning) to whatever it
+    // mounts on regardless of whether its bundled CSS is loaded, which
+    // breaks a static layout the moment a drag starts — so this nested one
+    // is deliberately never handed to Swiper at all.
+    if (el.closest('.ttlr_prev-episodes_wrap')) {
+      console.log('[ttlr] series swiper: skipping nested wrapper inside .ttlr_prev-episodes_wrap — kept static, not a carousel', el);
+      return;
+    }
+    initSeriesSwiper(el);
+  });
 });
 
 function initSeriesSwiper(root) {
