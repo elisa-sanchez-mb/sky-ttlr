@@ -1286,7 +1286,14 @@ function initNotesPad(root) {
   // (armed, then closed without confirming) always starts fresh.
   new MutationObserver(() => {
     if (isOpen()) return;
-    root.style.width = '';
+    // Deliberately does NOT touch root.style.width anymore — open/close
+    // width is fully owned by the external jQuery+GSAP script again (see
+    // the "Open/close toggle" note further up), and GSAP animates that
+    // SAME property on that SAME element frame-by-frame. This used to
+    // clear it to '' the instant is-open flipped to false, which raced
+    // against GSAP's tween just starting — root cause of a reported "no
+    // movement when opening/closing" after this script stopped handling
+    // open/close (2026-08-27). Only the delete-confirm reset is ours now.
     if (deleteBtn?.classList.contains('is-confirm')) deleteBtn.classList.remove('is-confirm');
   }).observe(root, { attributes: true, attributeFilter: ['is-open'] });
 }
@@ -1771,7 +1778,10 @@ ttlrReady('prev-content cards', function () {
 
 ttlrReady('hero cta', function () {
   const btnEl = document.querySelector('.ttlr_hero .ttlr_hero_heading-wrap .secondary-button-link');
-  const textEl = btnEl?.querySelector('.body-body-medium');
+  // Structural, not class-based — the inner text div's class (previously
+  // .body-body-medium) was removed from the Designer markup since this was
+  // first written, confirmed via a live HTML dump 2026-08-27.
+  const textEl = btnEl?.querySelector('.secondary-light-button > div');
   const cards = Array.from(document.querySelectorAll('.ttlr_hero .ttlr_cms_series-wrapper .ttlr_series_card-wrap'));
   console.log('[ttlr] hero cta: button', btnEl, '/ text el', textEl, '/ found ' + cards.length + ' series card(s)');
   if (!btnEl || !textEl || !cards.length) return;
