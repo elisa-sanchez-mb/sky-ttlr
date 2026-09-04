@@ -1812,7 +1812,7 @@ ttlrReady('hero cta', function () {
     if (resumeSeriesId) {
       const info = seriesInfo.get(resumeSeriesId);
       const nextEpisode = resumeEntry.completedCount + 1;
-      textEl.textContent = `Resume: Series ${info.number} EP${nextEpisode}`;
+      textEl.textContent = `Resume: S${info.number} EP${nextEpisode}`;
       const url = new URL(info.href, window.location.origin);
       url.searchParams.set('episode', nextEpisode);
       btnEl.href = url.toString();
