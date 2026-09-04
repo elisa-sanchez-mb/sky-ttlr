@@ -1808,20 +1808,30 @@ ttlrReady('bookmarks list', function () {
    Webflow.push callbacks more than once per page. ---- */
 
 ttlrReady('prev-content cards', function () {
-  if (document.body.dataset.ttlrPrevContentWired) return;
+  if (document.body.dataset.ttlrPrevContentWired) {
+    console.log('[ttlr] prev-content cards: already wired on this <body>, skipping re-run (this is where a stale/soft-navigated page would silently stop getting new behavior)');
+    return;
+  }
   document.body.dataset.ttlrPrevContentWired = 'true';
+
+  const cards = document.querySelectorAll('.ttlr_card-wrap.is-rewatch');
+  console.log('[ttlr] prev-content cards: wiring up, found ' + cards.length + ' .ttlr_card-wrap.is-rewatch element(s)');
 
   // One slot per Re-Watch carousel, created lazily right after the swiper
   // root (both children of .ttlr_prev-content_wrap) — reused across opens.
   function getSlot(monthItem) {
     const swiperRoot = monthItem.closest('.ttlr_cms_series-wrapper.swiper');
     const container = swiperRoot?.parentElement;
-    if (!swiperRoot || !container) return null;
+    if (!swiperRoot || !container) {
+      console.warn('[ttlr] prev-content cards: could not find the Re-Watch swiper root (or its parent) as an ancestor of this month item — panel cannot be relocated', monthItem);
+      return null;
+    }
     let slot = container.querySelector(':scope > .ttlr_prev-content_slot');
     if (!slot) {
       slot = document.createElement('div');
       slot.className = 'ttlr_prev-content_slot';
       swiperRoot.insertAdjacentElement('afterend', slot);
+      console.log('[ttlr] prev-content cards: created .ttlr_prev-content_slot', slot);
     }
     return slot;
   }
@@ -1839,6 +1849,7 @@ ttlrReady('prev-content cards', function () {
   function openMonth(monthItem) {
     const panel = monthItem.querySelector(':scope > .ttlr_prev-episodes_wrap');
     const slot = getSlot(monthItem);
+    console.log('[ttlr] prev-content cards: openMonth', monthItem, '/ panel found', !!panel, '/ slot found', !!slot);
     if (!panel || !slot) return;
 
     closeOpenPanel(); // restore whichever OTHER month's panel was open first
@@ -1851,6 +1862,7 @@ ttlrReady('prev-content cards', function () {
     slot.appendChild(panel);
     void slot.offsetWidth; // force a reflow so the height transition animates from 0, not a no-op
     slot.classList.add('is-open');
+    console.log('[ttlr] prev-content cards: panel relocated into slot', panel, '->', slot);
   }
 
   function closeMonth(monthItem) {
@@ -1858,7 +1870,7 @@ ttlrReady('prev-content cards', function () {
     closeOpenPanel();
   }
 
-  document.querySelectorAll('.ttlr_card-wrap.is-rewatch').forEach((card) => {
+  cards.forEach((card) => {
     card.addEventListener('click', function () {
       const monthItem = this.closest('.ttlr_cms_month-item');
       if (!monthItem) return;
@@ -1874,6 +1886,7 @@ ttlrReady('prev-content cards', function () {
   // default (confirmed present on the first month in a live dump) — sync
   // that to the relocated-panel behavior on load too, not just on click.
   const initiallyOpen = document.querySelector('.ttlr_cms_month-item.is-open');
+  console.log('[ttlr] prev-content cards: initial sync, month already .is-open in static markup?', initiallyOpen);
   if (initiallyOpen) openMonth(initiallyOpen);
 });
 
