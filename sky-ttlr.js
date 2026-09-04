@@ -1428,6 +1428,29 @@ ttlrReady('series swiper', function () {
     return;
   }
   document.querySelectorAll('.ttlr_cms_series-wrapper').forEach(initSeriesSwiper);
+
+  // The nested per-month series list inside .ttlr_prev-episodes_wrap (the
+  // Re-Watch accordion panel) reuses this same wrapper class, but — unlike
+  // the outer month-list carousel — its content is loaded asynchronously
+  // (confirmed 2026-09-04 via a live HTML dump: the outer wrapper carried
+  // Swiper's own "swiper-initialized" class and its slides had real inline
+  // width/margin styles from Swiper, but EVERY nested wrapper had neither,
+  // despite being fully populated with real episode data). The one-time
+  // querySelectorAll scan above runs before Finsweet has inserted any of
+  // these nested wrappers, so they're never handed to initSeriesSwiper at
+  // all. A MutationObserver catches them whenever they actually appear,
+  // instead of depending on this site's re-fired Webflow.push callbacks
+  // (ROOT CAUSE #2) to eventually re-scan at the right moment.
+  const seriesSwiperObserver = new MutationObserver((mutations) => {
+    mutations.forEach((mutation) => {
+      mutation.addedNodes.forEach((node) => {
+        if (node.nodeType !== 1) return;
+        if (node.matches?.('.ttlr_cms_series-wrapper')) initSeriesSwiper(node);
+        node.querySelectorAll?.('.ttlr_cms_series-wrapper').forEach(initSeriesSwiper);
+      });
+    });
+  });
+  seriesSwiperObserver.observe(document.body, { childList: true, subtree: true });
 });
 
 function initSeriesSwiper(root) {
