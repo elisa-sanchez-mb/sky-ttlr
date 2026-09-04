@@ -1793,36 +1793,88 @@ ttlrReady('bookmarks list', function () {
 });
 
 /* ---- Prev-content expandable cards: clicking a .ttlr_card-wrap.is-rewatch
-   toggles .is-open on its .ttlr_cms_month-item (accordion — only one open
-   at a time). Wrapped in ttlrReady/guarded the same as every other feature
-   in this file, since this site's Webflow runtime can re-fire Webflow.push
-   callbacks more than once per page — without the guard, a re-run would
-   attach a second click listener per card. ---- */
+   opens its month's episode panel (.ttlr_prev-episodes_wrap) — accordion,
+   only one open at a time. The panel lives inside .ttlr_cms_month-item,
+   which is itself a swiper-slide of the Re-Watch month-list carousel — as a
+   DOM descendant it scrolls/moves along with that slide no matter what
+   Swiper mode is used, but the design needs it fixed in place regardless of
+   carousel position (confirmed 2026-09-05 via a design comparison + live
+   devtools). The only way to make it truly unmovable is to physically
+   relocate it OUT of the sliding structure on open, into a static slot
+   that's a SIBLING of the swiper root — never a descendant of anything
+   Swiper transforms or scrolls — and move it back to its original slide
+   position on close. Wrapped in ttlrReady/guarded the same as every other
+   feature in this file, since this site's Webflow runtime can re-fire
+   Webflow.push callbacks more than once per page. ---- */
 
 ttlrReady('prev-content cards', function () {
   if (document.body.dataset.ttlrPrevContentWired) return;
   document.body.dataset.ttlrPrevContentWired = 'true';
 
+  // One slot per Re-Watch carousel, created lazily right after the swiper
+  // root (both children of .ttlr_prev-content_wrap) — reused across opens.
+  function getSlot(monthItem) {
+    const swiperRoot = monthItem.closest('.ttlr_cms_series-wrapper.swiper');
+    const container = swiperRoot?.parentElement;
+    if (!swiperRoot || !container) return null;
+    let slot = container.querySelector(':scope > .ttlr_prev-content_slot');
+    if (!slot) {
+      slot = document.createElement('div');
+      slot.className = 'ttlr_prev-content_slot';
+      swiperRoot.insertAdjacentElement('afterend', slot);
+    }
+    return slot;
+  }
+
+  let openPanel = null; // { panel, originalParent, originalNextSibling, slot }
+
+  function closeOpenPanel() {
+    if (!openPanel) return;
+    const { panel, originalParent, originalNextSibling, slot } = openPanel;
+    slot.classList.remove('is-open');
+    originalParent.insertBefore(panel, originalNextSibling);
+    openPanel = null;
+  }
+
+  function openMonth(monthItem) {
+    const panel = monthItem.querySelector(':scope > .ttlr_prev-episodes_wrap');
+    const slot = getSlot(monthItem);
+    if (!panel || !slot) return;
+
+    closeOpenPanel(); // restore whichever OTHER month's panel was open first
+    document.querySelectorAll('.ttlr_cms_month-item.is-open').forEach((item) => {
+      if (item !== monthItem) item.classList.remove('is-open');
+    });
+    monthItem.classList.add('is-open'); // still drives the card's own highlight styling
+
+    openPanel = { panel, originalParent: monthItem, originalNextSibling: panel.nextSibling, slot };
+    slot.appendChild(panel);
+    void slot.offsetWidth; // force a reflow so the height transition animates from 0, not a no-op
+    slot.classList.add('is-open');
+  }
+
+  function closeMonth(monthItem) {
+    monthItem.classList.remove('is-open');
+    closeOpenPanel();
+  }
+
   document.querySelectorAll('.ttlr_card-wrap.is-rewatch').forEach((card) => {
     card.addEventListener('click', function () {
       const monthItem = this.closest('.ttlr_cms_month-item');
       if (!monthItem) return;
-
-      const isCurrentlyOpen = monthItem.classList.contains('is-open');
-
-      // close every other open month item
-      document.querySelectorAll('.ttlr_cms_month-item.is-open').forEach((item) => {
-        if (item !== monthItem) item.classList.remove('is-open');
-      });
-
-      // toggle this one
-      if (isCurrentlyOpen) {
-        monthItem.classList.remove('is-open');
+      if (monthItem.classList.contains('is-open')) {
+        closeMonth(monthItem);
       } else {
-        monthItem.classList.add('is-open');
+        openMonth(monthItem);
       }
     });
   });
+
+  // Static Designer markup can ship with a month already marked .is-open by
+  // default (confirmed present on the first month in a live dump) — sync
+  // that to the relocated-panel behavior on load too, not just on click.
+  const initiallyOpen = document.querySelector('.ttlr_cms_month-item.is-open');
+  if (initiallyOpen) openMonth(initiallyOpen);
 });
 
 /* ---- Hero "Let's get started" / "Resume" button: if nothing's been
