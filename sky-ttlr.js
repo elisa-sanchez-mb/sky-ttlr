@@ -1692,9 +1692,20 @@ ttlrReady('bookmarks list', function () {
     // initialized on this list (via initSeriesSwiper above, which targets
     // .ttlr_cms_series-wrapper generically and doesn't know or care that
     // this is the bookmarks list), it needs to be told the slide count
-    // changed rather than left with stale internal measurements.
+    // changed rather than left with stale internal measurements. If it was
+    // NEVER initialized in the first place — e.g. the 'series swiper'
+    // registration ran before this section had any real cards to measure —
+    // initialize it now instead of silently leaving the list non-swiping
+    // forever; initSeriesSwiper's own root.swiper guard makes this safe to
+    // call every render() without ever double-initializing.
     const swiperRoot = listEl.closest('.swiper');
-    if (swiperRoot?.swiper) swiperRoot.swiper.update();
+    if (swiperRoot) {
+      if (swiperRoot.swiper) {
+        swiperRoot.swiper.update();
+      } else if (typeof Swiper !== 'undefined') {
+        initSeriesSwiper(swiperRoot);
+      }
+    }
   }
 
   render(loadLocalBookmarks(), loadLocalCompletedIds());
