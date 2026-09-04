@@ -1754,3 +1754,85 @@ ttlrReady('prev-content cards', function () {
     });
   });
 });
+
+/* ---- Hero "Let's get started" / "Resume" button: if nothing's been
+   started, shows "Let's get started" linking to the first series in the
+   hero carousel. If some series has partial progress, shows "Resume:
+   Series N EP{completedCount+1}" linking straight to that next episode
+   (?episode= query param, same as the router already reads). Falls back
+   to "Let's get started" if every series is either untouched or fully
+   completed. Reads ttl-progress directly (local-first + Memberstack
+   hydrate) rather than depending on initSeriesCard's own DOM mutations, so
+   it doesn't matter which registration order the two run in. The series
+   cards are only ever used here as a lookup table (href, displayed series
+   number) — scoped to .ttlr_hero specifically, since .ttlr_cms_series-
+   wrapper/.ttlr_series_card-wrap are reused by other sections on the same
+   page (Re-Watch, bookmarks) that aren't relevant here. ---- */
+
+ttlrReady('hero cta', function () {
+  const btnEl = document.querySelector('.ttlr_hero .ttlr_hero_heading-wrap .secondary-button-link');
+  const textEl = btnEl?.querySelector('.body-body-medium');
+  const cards = Array.from(document.querySelectorAll('.ttlr_hero .ttlr_cms_series-wrapper .ttlr_series_card-wrap'));
+  console.log('[ttlr] hero cta: button', btnEl, '/ text el', textEl, '/ found ' + cards.length + ' series card(s)');
+  if (!btnEl || !textEl || !cards.length) return;
+
+  const PROGRESS_FIELD = 'ttl-progress';
+  const PROGRESS_LOCAL_KEY = 'ttlr-progress-local';
+
+  const seriesInfo = new Map();
+  cards.forEach((card) => {
+    const seriesId = card.querySelector('.ttlr_badge[data-series-id]')?.dataset.seriesId;
+    if (!seriesId) return;
+    const number = card.querySelectorAll('.series-number_wrap > div')[1]?.textContent.trim() || '';
+    seriesInfo.set(seriesId, { href: card.href, number });
+  });
+
+  function render(seriesProgress) {
+    let resumeSeriesId = null;
+    let resumeEntry = null;
+    for (const [seriesId] of seriesInfo) {
+      const entry = seriesProgress?.[seriesId];
+      if (entry && entry.completedCount > 0 && !entry.completed) {
+        resumeSeriesId = seriesId;
+        resumeEntry = entry;
+        break; // first partially-started series in carousel order
+      }
+    }
+
+    if (resumeSeriesId) {
+      const info = seriesInfo.get(resumeSeriesId);
+      const nextEpisode = resumeEntry.completedCount + 1;
+      textEl.textContent = `Resume: Series ${info.number} EP${nextEpisode}`;
+      const url = new URL(info.href, window.location.origin);
+      url.searchParams.set('episode', nextEpisode);
+      btnEl.href = url.toString();
+    } else {
+      textEl.textContent = "Let's get started";
+      const firstCard = cards[0];
+      if (firstCard) btnEl.href = firstCard.href;
+    }
+    console.log('[ttlr] hero cta: rendered ->', textEl.textContent, btnEl.href);
+  }
+
+  let local = {};
+  try {
+    local = JSON.parse(window.localStorage.getItem(PROGRESS_LOCAL_KEY)) || {};
+  } catch (err) {
+    console.error('[ttlr] hero cta: failed to read local progress cache', err);
+  }
+  render(local.series);
+
+  waitForMemberstack().then(async (ms) => {
+    if (!ms) return;
+    try {
+      const { data: member } = await ms.getCurrentMember();
+      if (!member) return;
+      const raw = member.customFields?.[PROGRESS_FIELD];
+      if (!raw) return;
+      const remote = JSON.parse(raw);
+      render(remote.series);
+    } catch (err) {
+      console.error('[ttlr] hero cta: failed to read remote progress', err);
+    }
+  });
+});
