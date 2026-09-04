@@ -1445,12 +1445,18 @@ function initSeriesSwiper(root) {
   }
 
   // Nav buttons are siblings of the swiper container (not descendants), so
-  // scope the lookup to the shared parent first; fall back to a page-wide
-  // lookup only if that fails.
+  // scope the lookup to the shared parent first. The page-wide
+  // .swiper-button-next/-prev fallback is deliberately restricted to the
+  // hero series carousel (.ttlr_hero_series-wrap) — .ttlr_cms_series-wrapper
+  // is reused by other carousels on the same page (Re-Watch, bookmarks), and
+  // falling back to a page-wide lookup for those too would bind the SAME
+  // shared buttons to multiple Swiper instances at once. A carousel outside
+  // the hero wrap only gets nav buttons if it has its own local siblings.
   const scope = root.parentElement || document;
-  const nextEl = scope.querySelector('.swiper-button-next') || document.querySelector('.swiper-button-next');
-  const prevEl = scope.querySelector('.swiper-button-prev') || document.querySelector('.swiper-button-prev');
-  console.log('[ttlr] series swiper: initializing', root, '/ next', nextEl, '/ prev', prevEl);
+  const isHeroSeries = !!root.closest('.ttlr_hero_series-wrap');
+  const nextEl = scope.querySelector('.swiper-button-next') || (isHeroSeries ? document.querySelector('.swiper-button-next') : undefined);
+  const prevEl = scope.querySelector('.swiper-button-prev') || (isHeroSeries ? document.querySelector('.swiper-button-prev') : undefined);
+  console.log('[ttlr] series swiper: initializing', root, '/ isHeroSeries', isHeroSeries, '/ next', nextEl, '/ prev', prevEl);
 
   // slidesPerView: 'auto' uses each .ttlr_cms_series-item's own CSS width —
   // that width needs to be set explicitly in Designer for this to size
@@ -1458,10 +1464,7 @@ function initSeriesSwiper(root) {
   new Swiper(root, {
     slidesPerView: 3,
     spaceBetween: 20,
-    navigation: {
-      nextEl,
-      prevEl,
-    },
+    navigation: (nextEl || prevEl) ? { nextEl, prevEl } : undefined,
   });
 }
 
