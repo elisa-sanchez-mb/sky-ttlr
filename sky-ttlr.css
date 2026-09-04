@@ -14,12 +14,6 @@
   pointer-events: none;
 }
 
-/* Sequential fade between episodes (see show() in sky-ttlr.js) —
-   .ttlr-episode-fade is added to fade the outgoing item to 0, then (after
-   it's fully hidden) added-then-removed on the incoming item to fade it in
-   from 0. Sequential, not simultaneous, since having both items visible in
-   normal document flow at once would visibly jump the page layout. Duration
-   must stay in sync with EPISODE_TRANSITION_MS there. */
 .ttlr_episode_cms_item {
   transition: opacity 0.15s ease;
 }
@@ -27,18 +21,6 @@
 .ttlr_episode_cms_item.ttlr-episode-fade {
   opacity: 0;
 }
-
-/* Progress bar: .ttlr_progress_fill's own background (gradient, colors, etc.)
-   is entirely Designer's — this file never sets `background` on it, on
-   purpose, since the `background` shorthand resets background-image to
-   `none` and would silently wipe out Designer's gradient if this rule ever
-   won the cascade. All this does is control HOW MUCH of that gradient is
-   visible (clip-path, driven by episode completion %) and WHERE it's cut
-   into pill segments (mask-image, computed in JS from each
-   .ttlr_progress_segment's actual rendered position — see updateProgressMask
-   in sky-ttlr.js). Segment count doesn't need to match episode count for
-   that to work; it's a purely visual cut over one continuous, unmodified
-   gradient. */
 
 .ttlr_episode_progress_inner {
   position: relative;
@@ -53,9 +35,6 @@
   pointer-events: none;
 }
 
-/* Brief pulse on a genuine progress increase (see updateProgressDisplay in
-   sky-ttlr.js — never fires on the initial paint or a no-change re-render).
-   Uses filter, not background, so it still never touches Designer's gradient. */
 .ttlr_progress_fill.is-updated {
   animation: ttlr-progress-pulse 0.5s ease;
 }
@@ -65,14 +44,6 @@
   50% { filter: brightness(1.25); }
 }
 
-/* Empty-state color for segments not yet reached by the fill. Applied to
-   both the segment itself and Designer's nested .ttlr_progress_segment_bg
-   (whichever exists in your markup gets it; harmless if both do). Safe to
-   set directly (no overlap risk): .ttlr_progress_fill is a positioned
-   element (position: absolute above), so by normal CSS stacking rules it
-   always paints above these non-positioned segments regardless of DOM
-   order — wherever the fill's clip-path/mask actually reveal paint, it
-   fully covers this color; everywhere else, this shows through untouched. */
 .ttlr_progress_segment,
 .ttlr_progress_segment_bg {
   background-color: #D9D9D9;
@@ -87,12 +58,6 @@
   display: block;
 }
 
-/* Same trigger as .ttlr_series-end_success above — shown together when
-   "Finish Series" is clicked on the last episode. !important on both rules:
-   Designer styling on this class (set directly in the Designer canvas) can
-   carry higher effective specificity than a plain class selector here, and
-   has actually won before on a different element (the progress bar
-   gradient) — this makes hidden/shown non-negotiable regardless. */
 .ttlr_completed_episode_wrap {
   display: none !important;
 }
@@ -113,9 +78,6 @@
   cursor: default;
 }
 
-/* Transform creates its own stacking context, but bump it explicitly so
-   it reliably paints above neighbouring props/zones mid-drag. Relative
-   positioning with no top/left set doesn't move the box at all. */
 .ttlr_dragdrop_prop_item.is-dragging {
   position: relative;
   z-index: 50;
@@ -130,10 +92,6 @@
   outline: 2px solid #2e7d32;
 }
 
-/* Once placed correctly, the prop is a real DOM child of its drop zone
-   (see place() in sky-ttlr.js) — scale it to fill that zone's box rather
-   than keeping its tray size. Only applies once actually inside a zone,
-   so props still in the tray (or reset back to it) are unaffected. */
 .ttlr_dragdrop_drop-zone .ttlr_dragdrop_prop_item.is-correct {
   width: 100%;
   height: 100%;
@@ -186,7 +144,6 @@
   touch-action: none; /* required for reliable pointer dragging on touch, same as the quiz props */
 }
 
-/* Suppresses text selection site-wide while actively dragging the resize handle */
 html.ttlr-is-resizing,
 html.ttlr-is-resizing * {
   user-select: none !important;
@@ -209,8 +166,6 @@ html.ttlr-is-resizing * {
 
 /* ---- Series navigation ---- */
 
-/* The lookup list must always be hidden — enforced here rather than left to
-   Designer, so it can never accidentally render visible. */
 [data-series-nav="source"] {
   display: none;
 }
@@ -223,69 +178,15 @@ html.ttlr-is-resizing * {
 
 /* ---- Series cards (home page) ---- */
 
-/* Structural backstop for the mini completion fill bar — .ttlr_series_card-inner's
-   width is set by JS (see initSeriesCard in sky-ttlr.js); this just makes sure
-   whatever width it's given actually clips to the bar's box instead of
-   overflowing it. Color/background is entirely Designer's, same reasoning as
-   the main episode progress bar. */
 .ttlr_series_card-progress {
   overflow: hidden;
 }
 
-/* The fill itself — .ttlr_series_card-inner had no background at all before
-   this, so JS setting its `width` (see initSeriesCard in sky-ttlr.js) had
-   nothing visible to reveal. Explicit height too, since JS only ever
-   controls width. */
 .ttlr_series_card-inner {
   height: 100%;
   background-image: linear-gradient(90deg, #FF8C00 5.03%, #F80032 25.04%, #FF00A0 45.04%, #8C28FF 65.06%, #0023FF 82.04%, #19A0FF 96.05%), linear-gradient(90deg, #FF6400 11.81%, #FF0A50 50.11%, #FF00A5 88.92%);
 }
 
-/* Swiper's own bundled CSS is loaded now (added directly in Webflow Custom
-   Code Head — outside this repo). It handles slide sizing/wrapper
-   transforms/scroll entirely on its own; the only thing it does that
-   Designer doesn't want is repositioning/reglyphing .swiper-button-prev/-next
-   (its own absolutely-positioned default arrow glyphs) — these are Designer's
-   own custom SVG-icon buttons in Designer's own layout, not Swiper's. This
-   neutralizes just that part; everything else about the official stylesheet
-   is left alone. (2026-09-05: this replaces an earlier attempt at running
-   WITHOUT Swiper's CSS at all, manually replicating just the pieces this
-   project's own carousels needed — that approach caused a real regression
-   of its own, see git history around cssMode/swiper-css-mode if this ever
-   needs to be revisited.) */
-.swiper-button-prev,
-.swiper-button-next {
-  position: static;
-  width: auto;
-  height: auto;
-  margin-top: 0;
-}
-
-.swiper-button-prev::after,
-.swiper-button-next::after {
-  content: none;
-}
-
-/* Prev-content expandable cards: the open month's episode panel
-   (.ttlr_prev-episodes_wrap) is physically relocated into this slot on
-   open — a sibling of the Re-Watch swiper root, never a descendant of
-   anything Swiper transforms/scrolls, so it stays fixed regardless of
-   carousel position (see initPrevContentCards's click handling in
-   sky-ttlr.js). The page's own embedded CSS animates this panel's height
-   via `.ttlr_cms_month-item.is-open .ttlr_prev-episodes_wrap` — once moved
-   here the panel is no longer a descendant of that selector at all, so the
-   same open/close animation is duplicated here instead. */
-
-/* The slot must stay in NORMAL document flow — the whole point of moving
-   the panel here (instead of leaving it overlaid) is that opening it
-   should push later content (e.g. #bookmarks, right after the Re-Watch
-   section) down the page, not float over it. Forced back to `static`
-   because a Designer-authored element for this class (added directly in
-   the Designer canvas, not by this script) defaults to `position: absolute`
-   — !important since Designer's own canvas styling on a class can carry
-   higher effective specificity than a plain class selector here (same
-   pattern documented elsewhere in this project, e.g.
-   .ttlr_completed_episode_wrap). */
 .ttlr_prev-content_slot {
   position: static !important;
 }
